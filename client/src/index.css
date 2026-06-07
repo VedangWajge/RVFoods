@@ -1,0 +1,280 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Design tokens (Shadcn HSL + RV Foods brand) ─── */
+@layer base {
+  :root {
+    --background: 40 33% 98%;
+    --foreground: 0 0% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+    --primary-hsl: 11 58% 48%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 40 33% 96%;
+    --secondary-foreground: 0 0% 10%;
+    --muted: 0 0% 64%;
+    --muted-foreground: 0 0% 42%;
+    --accent-hsl: 38 91% 55%;
+    --accent-foreground: 0 0% 10%;
+    --destructive: 6 63% 46%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 33 24% 88%;
+    --input: 33 24% 88%;
+    --ring: 11 58% 48%;
+    --radius: 0.75rem;
+
+    /* Brand hex references for JS / docs */
+    --color-primary: #c84b31;
+    --color-primary-dark: #a63a24;
+    --color-primary-light: #e8755a;
+    --color-accent: #f5a623;
+    --color-accent-light: #fdd284;
+    --color-background: #fdfaf6;
+    --color-surface: #ffffff;
+    --color-text-primary: #1a1a1a;
+    --color-text-secondary: #6b6b6b;
+    --color-text-muted: #a3a3a3;
+    --color-border: #e8e0d5;
+    --color-success: #2d6a4f;
+    --color-error: #c0392b;
+    --color-footer: #1a1a1a;
+  }
+
+  *,
+  *::before,
+  *::after {
+    @apply border-border;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply min-h-screen bg-background font-body text-base font-normal text-text-primary antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-heading font-bold text-text-primary;
+  }
+
+  h1 {
+    @apply text-display-sm md:text-display-md lg:text-display-lg;
+  }
+
+  h2 {
+    @apply text-3xl lg:text-4xl;
+  }
+
+  h3 {
+    @apply text-2xl lg:text-3xl;
+  }
+
+  ::selection {
+    @apply bg-primary/20 text-text-primary;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+  }
+}
+
+/* ─── Reusable layout & component classes ─── */
+@layer components {
+  /* Layout */
+  .container-main {
+    @apply mx-auto w-full max-w-content px-4 sm:px-6 lg:px-8;
+  }
+
+  .section-padding {
+    @apply py-16 lg:py-24;
+  }
+
+  .section-padding-sm {
+    @apply py-12 lg:py-16;
+  }
+
+  /* Section headers */
+  .section-label {
+    @apply text-sm font-medium uppercase tracking-widest text-primary;
+  }
+
+  .section-title {
+    @apply font-heading text-3xl font-bold text-text-primary lg:text-4xl;
+  }
+
+  .section-subtitle {
+    @apply mx-auto max-w-2xl text-center text-text-secondary;
+  }
+
+  .section-header {
+    @apply mb-10 flex flex-col items-center gap-3 text-center lg:mb-14;
+  }
+
+  /* Buttons (design system — use with <button> or <a>) */
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-primary px-6 py-2.5 font-medium text-white transition-all duration-200 hover:bg-primary-dark hover:shadow-lg active:scale-95 disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg border-2 border-primary px-6 py-2.5 font-medium text-primary transition-all duration-200 hover:bg-primary hover:text-white active:scale-95 disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 font-medium text-primary transition-colors duration-200 hover:bg-primary/10 active:scale-95;
+  }
+
+  /* Cards */
+  .card-base {
+    @apply overflow-hidden rounded-xl border border-border bg-surface shadow-card transition-shadow duration-200 hover:shadow-card-hover;
+  }
+
+  /* Add `group` class alongside card-product for hover image scale */
+  .card-product {
+    @apply card-base;
+  }
+
+  .card-product-image {
+    @apply aspect-square w-full object-cover transition-transform duration-300 group-hover:scale-105;
+  }
+
+  .card-padding {
+    @apply p-6;
+  }
+
+  /* Badges & pills */
+  .badge-pill {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold;
+  }
+
+  .badge-category {
+    @apply badge-pill bg-accent text-text-primary;
+  }
+
+  .badge-featured {
+    @apply badge-pill bg-primary text-white;
+  }
+
+  /* Navbar */
+  .navbar {
+    @apply sticky top-0 z-50 h-16 border-b border-border bg-white/95 shadow-nav backdrop-blur-sm;
+  }
+
+  .nav-link {
+    @apply text-text-secondary transition-colors duration-200 hover:text-primary;
+  }
+
+  .nav-link-active {
+    @apply font-medium text-primary;
+  }
+
+  /* Hero */
+  .hero-section {
+    @apply relative min-h-[85vh] w-full overflow-hidden bg-hero-gradient bg-spice-pattern;
+  }
+
+  .hero-headline {
+    @apply font-heading text-display-sm font-bold leading-tight text-text-primary md:text-display-md lg:text-display-lg;
+  }
+
+  .hero-subheadline {
+    @apply max-w-xl text-lg text-text-secondary md:text-xl;
+  }
+
+  /* Footer */
+  .footer {
+    @apply bg-footer text-white;
+  }
+
+  .footer-link {
+    @apply text-white/70 transition-colors hover:text-white;
+  }
+
+  /* Form inputs (non-Shadcn contexts) */
+  .input-base {
+    @apply w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20;
+  }
+
+  /* Trust bar / feature icons row */
+  .trust-bar {
+    @apply grid grid-cols-2 gap-6 border-y border-border bg-surface py-8 md:grid-cols-4;
+  }
+
+  .trust-item {
+    @apply flex flex-col items-center gap-2 text-center;
+  }
+
+  .trust-item-title {
+    @apply text-sm font-semibold text-text-primary;
+  }
+
+  .trust-item-desc {
+    @apply text-xs text-text-muted;
+  }
+
+  /* Price display */
+  .price-current {
+    @apply text-lg font-bold text-primary;
+  }
+
+  .price-original {
+    @apply text-sm text-text-muted line-through;
+  }
+
+  /* Star rating placeholder */
+  .star-rating {
+    @apply flex items-center gap-0.5 text-accent;
+  }
+
+  /* Skeleton loader */
+  .skeleton {
+    @apply relative overflow-hidden rounded-lg bg-border/50;
+  }
+
+  .skeleton::after {
+    @apply absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/40 to-transparent content-[''];
+    animation: shimmer 1.5s infinite;
+  }
+}
+
+/* ─── Utility helpers ─── */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .gradient-text {
+    @apply bg-primary-gradient bg-clip-text text-transparent;
+  }
+
+  .image-cover {
+    @apply h-full w-full object-cover;
+  }
+
+  .aspect-product {
+    aspect-ratio: 1 / 1;
+  }
+}
