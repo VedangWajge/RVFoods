@@ -19,6 +19,7 @@ const PORT = Number(process.env.PORT) || 5000;
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
+  "https://rv-foods.onrender.com",
 ];
 if (process.env.CLIENT_URL) {
   allowedOrigins.push(process.env.CLIENT_URL.replace(/\/$/, ""));
