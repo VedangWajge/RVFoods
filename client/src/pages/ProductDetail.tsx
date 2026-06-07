@@ -176,7 +176,7 @@ export default function ProductDetail() {
         <meta name="description" content={product.shortDescription || product.description} />
       </Helmet>
 
-      <div className="bg-[#FDFAF6] py-12">
+      <div className="bg-[#FDFAF6] py-12 pb-24 sm:pb-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Breadcrumbs */}
           <nav className="flex items-center gap-2 text-xs font-semibold text-text-secondary mb-8">
@@ -245,9 +245,14 @@ export default function ProductDetail() {
                 </div>
 
                 {/* Name */}
-                <h1 className="font-playfair text-2xl md:text-3xl lg:text-4xl font-bold text-text-primary leading-tight mb-2">
-                  {product.name}
-                </h1>
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <h1 className="font-playfair text-2xl md:text-3xl lg:text-4xl font-bold text-text-primary leading-tight">
+                    {product.name}
+                  </h1>
+                  <Badge className="bg-festive-cream border border-accent/30 text-accent-deep text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 flex items-center gap-1">
+                    Made in Mumbai 🏠
+                  </Badge>
+                </div>
 
                 {/* Ratings block */}
                 <div className="flex items-center gap-2 mb-6">
@@ -394,13 +399,15 @@ export default function ProductDetail() {
 
               {activeTab === "ingredients" && (
                 <div className="space-y-4">
-                  <h3 className="text-base font-semibold text-text-primary">What goes inside:</h3>
+                  <h3 className="text-base font-semibold text-text-primary">Ingredients:</h3>
                   {product.ingredients && product.ingredients.length > 0 ? (
-                    <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 pl-4 list-disc text-text-secondary text-sm md:text-base">
+                    <div className="flex flex-wrap gap-2">
                       {product.ingredients.map((ing, idx) => (
-                        <li key={idx} className="capitalize">{ing}</li>
+                        <span key={idx} className="bg-festive-cream text-text-primary border border-border px-3 py-1.5 rounded-full text-xs font-semibold capitalize shadow-sm">
+                          {ing}
+                        </span>
                       ))}
-                    </ul>
+                    </div>
                   ) : (
                     <p className="text-text-secondary text-sm">
                       Made with 100% natural, traditionally-sourced ingredients. Free from chemicals, artificial preservatives, and food coloring.
@@ -413,9 +420,12 @@ export default function ProductDetail() {
                 <div className="space-y-4">
                   <h3 className="text-base font-semibold text-text-primary">Health & Taste Benefits:</h3>
                   {product.benefits && product.benefits.length > 0 ? (
-                    <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 pl-4 list-disc text-text-secondary text-sm md:text-base">
+                    <ul className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-0 text-text-secondary text-sm md:text-base">
                       {product.benefits.map((benefit, idx) => (
-                        <li key={idx}>{benefit}</li>
+                        <li key={idx} className="flex items-start gap-2.5">
+                          <span className="text-festive-green font-bold text-lg select-none leading-none">✓</span>
+                          <span>{benefit}</span>
+                        </li>
                       ))}
                     </ul>
                   ) : (
@@ -597,6 +607,22 @@ export default function ProductDetail() {
             </div>
           </div>
 
+          {/* Why RV Foods? Mini Section */}
+          <div className="bg-festive-cream border border-border/80 rounded-2xl p-6 mb-12 text-center select-none shadow-sm">
+            <h3 className="text-sm font-bold tracking-widest text-accent-deep uppercase mb-4">Why Choose RV Foods?</h3>
+            <div className="flex flex-wrap justify-center gap-4 text-xs sm:text-sm font-semibold text-text-primary">
+              <span className="bg-white border border-border/60 px-4 py-2 rounded-full shadow-sm flex items-center gap-1.5">
+                🌿 No Preservatives
+              </span>
+              <span className="bg-white border border-border/60 px-4 py-2 rounded-full shadow-sm flex items-center gap-1.5">
+                🏠 Homemade
+              </span>
+              <span className="bg-white border border-border/60 px-4 py-2 rounded-full shadow-sm flex items-center gap-1.5">
+                🚚 Ships in Maharashtra
+              </span>
+            </div>
+          </div>
+
           {/* Related Products Section */}
           {filteredRelated.length > 0 && (
             <div>
@@ -616,6 +642,23 @@ export default function ProductDetail() {
 
         </div>
       </div>
+
+      {/* Fixed bottom bar for mobile only */}
+      {!isOutOfStock && (
+        <div className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border px-4 py-3 shadow-[0_-8px_20px_rgba(26,26,26,0.08)] flex items-center justify-between gap-4">
+          <div className="flex flex-col">
+            <span className="text-[10px] uppercase font-bold text-text-muted">Total Price</span>
+            <span className="text-base font-extrabold text-primary">{formatCurrency(displayPrice * quantity)}</span>
+          </div>
+          <button
+            onClick={handleBuyWhatsApp}
+            type="button"
+            className="flex-grow h-11 bg-[#25D366] text-white hover:bg-[#1ebe57] rounded-lg text-sm font-bold flex items-center justify-center gap-1.5 shadow-md transition-colors"
+          >
+            <WhatsAppIcon className="w-4 h-4 fill-white" /> Order via WhatsApp
+          </button>
+        </div>
+      )}
     </>
   );
 }

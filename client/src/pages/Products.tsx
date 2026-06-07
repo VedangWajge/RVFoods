@@ -156,17 +156,18 @@ export default function Products() {
         />
       </Helmet>
 
+      {/* Page hero banner */}
+      <div className="bg-festive-cream pattern-bg py-12 text-center border-b border-border select-none">
+        <h1 className="font-heading text-4xl font-bold text-text-primary">
+          Our Products
+        </h1>
+        <p className="mt-2 text-text-secondary text-sm sm:text-base max-w-xl mx-auto">
+          Small batches. Made fresh. Shipped across Maharashtra.
+        </p>
+      </div>
+
       <div className="bg-[#FDFAF6] min-h-screen py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
-          <div className="mb-8 text-center md:text-left">
-            <h1 className="font-playfair text-3xl md:text-4xl font-bold text-text-primary">
-              Our Traditional Kitchen
-            </h1>
-            <p className="mt-2 text-text-secondary text-sm md:text-base max-w-xl">
-              Pure ingredients, hand-crafted flavors, and time-honored recipes made without preservatives.
-            </p>
-          </div>
 
           {/* Main Layout */}
           <div className="lg:grid lg:grid-cols-4 lg:gap-8">
@@ -423,6 +424,45 @@ export default function Products() {
                 </div>
               </div>
 
+              {/* Category Filter Pills */}
+              <div className="flex flex-wrap items-center gap-2 pb-2">
+                <button
+                  type="button"
+                  onClick={() => updateQueryParam({ category: null })}
+                  className={`px-4 py-2 rounded-full text-xs font-semibold transition-all border ${
+                    !activeCategory
+                      ? "bg-text-primary text-white border-text-primary shadow-sm"
+                      : "bg-white text-text-secondary border-border hover:bg-background"
+                  }`}
+                >
+                  All Products
+                </button>
+                {CATEGORIES.map((cat) => {
+                  const isSelected = activeCategory === cat.value;
+                  let selectedClass = "";
+                  if (isSelected) {
+                    if (cat.value === "spices") selectedClass = "border-accent text-accent-deep bg-accent/5";
+                    else if (cat.value === "ghee") selectedClass = "border-[#F5A623] text-[#F5A623] bg-[#F5A623]/5";
+                    else if (cat.value === "sweets") selectedClass = "border-primary text-primary bg-primary/5";
+                    else selectedClass = "border-primary text-primary bg-primary/5"; // default
+                  }
+                  return (
+                    <button
+                      key={cat.value}
+                      type="button"
+                      onClick={() => handleCategorySelect(cat.value)}
+                      className={`px-4 py-2 rounded-full text-xs font-semibold transition-all border ${
+                        isSelected
+                          ? `font-bold ${selectedClass}`
+                          : "bg-white text-text-secondary border-border hover:bg-background"
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
+
               {/* Active Filters Bar */}
               {hasActiveFilters && (
                 <div className="flex flex-wrap items-center gap-2 py-2">
@@ -475,6 +515,20 @@ export default function Products() {
               {loading ? (
                 <div className="flex items-center justify-center py-24 min-h-[400px]">
                   <Loader size="lg" label="Sourcing fresh products..." />
+                </div>
+              ) : products.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center bg-white rounded-xl border border-border p-8 shadow-sm">
+                  <span className="text-5xl mb-4" role="img" aria-label="sad face">😔</span>
+                  <h3 className="font-heading text-xl font-bold text-text-primary">No products found 😔</h3>
+                  <p className="text-text-secondary text-sm mt-1 mb-6">
+                    Try a different filter or browse all products.
+                  </p>
+                  <Button
+                    onClick={handleClearAll}
+                    className="btn-primary rounded-full px-6 py-2"
+                  >
+                    Browse All
+                  </Button>
                 </div>
               ) : (
                 <>

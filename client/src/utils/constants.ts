@@ -8,8 +8,8 @@ export const BRAND = {
   tagline: "Pure. Traditional. Delivered.",
   description:
     "Premium Indian homemade food — authentic masale, pure ghee, and traditional sweets delivered to your door.",
-  email: "hello@rvfoods.in",
-  phone: "+91 98765 43210",
+  email: "vedangwajge2004@gmail.com",
+  phone: "+91 9930015398",
 } as const;
 
 export const COLORS = {
@@ -56,7 +56,8 @@ export const ORDER_STATUS_CONFIG: Record<
 
 export const NAV_LINKS = [
   { label: "Home", href: "/" },
-  { label: "Shop", href: "/products" },
+  { label: "Products", href: "/products" },
+  { label: "How to Order", href: "/how-to-order" },
   { label: "About", href: "/about" },
   { label: "Contact", href: "/contact" },
 ] as const;

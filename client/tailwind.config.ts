@@ -18,8 +18,7 @@ const config: Config = {
     },
     extend: {
       colors: {
-        /* Shadcn semantic tokens (HSL via CSS variables) */
-        border: "hsl(var(--border))",
+        border: '#E8E0D5',
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         foreground: "hsl(var(--foreground))",
@@ -43,38 +42,37 @@ const config: Config = {
           DEFAULT: "hsl(var(--secondary))",
           foreground: "hsl(var(--secondary-foreground))",
         },
-        /* RV Foods brand palette (direct hex — use in layouts & marketing) */
         primary: {
-          DEFAULT: "#C84B31",
-          dark: "#A63A24",
-          light: "#E8755A",
-          foreground: "#FFFFFF",
+          DEFAULT: '#C84B31',   // Deep saffron-rust
+          dark: '#A63A24',
+          light: '#E8755A',
         },
         accent: {
-          DEFAULT: "#F5A623",
-          light: "#FDD284",
-          foreground: "#1A1A1A",
+          DEFAULT: '#F5A623',   // Turmeric gold
+          light: '#FDD284',
+          deep: '#D4881A',
         },
-        background: "#FDFAF6",
-        surface: "#FFFFFF",
-        "text-primary": "#1A1A1A",
-        "text-secondary": "#6B6B6B",
-        "text-muted": "#A3A3A3",
-        success: {
-          DEFAULT: "#2D6A4F",
-          foreground: "#FFFFFF",
+        festive: {
+          green: '#2D6A4F',     // Tulsi/paan green
+          'green-light': '#52B788',
+          maroon: '#7B1D1D',    // Deep maroon
+          cream: '#FDF6EC',     // Warm cream
+          orange: '#F4742B',    // Bright marigold orange
         },
-        error: {
-          DEFAULT: "#C0392B",
-          foreground: "#FFFFFF",
+        background: '#FDFAF6',
+        surface: '#FFFFFF',
+        text: {
+          primary: '#1A1A1A',
+          secondary: '#6B6B6B',
+          muted: '#A3A3A3',
         },
-        footer: "#1A1A1A",
       },
       fontFamily: {
         heading: ['"Playfair Display"', "Georgia", "serif"],
         body: ['"Inter"', "system-ui", "sans-serif"],
         sans: ['"Inter"', "system-ui", "sans-serif"],
         serif: ['"Playfair Display"', "Georgia", "serif"],
+        marathi: ['"Tiro Devanagari Marathi"', "serif"],
       },
       fontSize: {
         "display-lg": ["3.75rem", { lineHeight: "1.1", letterSpacing: "-0.02em" }],
