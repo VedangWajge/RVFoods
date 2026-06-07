@@ -76,10 +76,10 @@ const startServer = async (): Promise<void> => {
     await connectDB();
 
     app.listen(PORT, () => {
-      console.log(`Server running on http://192.168.1.5:${PORT}`);
-      console.log(`Health check: http://192.168.1.5:${PORT}/api/health`);
-      console.log(`Auth API:    http://192.168.1.5:${PORT}/api/auth`);
-      console.log(`Products API: http://192.168.1.5:${PORT}/api/products`);
+      console.log(`Server running on http://localhost:${PORT}`);
+      console.log(`Health check: http://localhost:${PORT}/api/health`);
+      console.log(`Auth API:    http://localhost:${PORT}/api/auth`);
+      console.log(`Products API: http://localhost:${PORT}/api/products`);
     });
   } catch (error) {
     console.error("Failed to start server:", error);
