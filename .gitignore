@@ -33,3 +33,6 @@ coverage/
 *.pem
 .cache/
 uploads/
+
+ERROR.png
+make admin.png
