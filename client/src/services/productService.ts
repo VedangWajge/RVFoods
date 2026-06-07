@@ -96,7 +96,7 @@ export const productService = {
    * Delete product image (Admin only)
    */
   async deleteProductImage(id: string, imageId: string): Promise<ApiResponse<Product>> {
-    const { data } = await api.delete<ApiResponse<Product>>(`/products/${id}/images/${imageId}`);
+    const { data } = await api.delete<ApiResponse<Product>>(`/products/${id}/images/${encodeURIComponent(imageId)}`);
     return data;
   },
 

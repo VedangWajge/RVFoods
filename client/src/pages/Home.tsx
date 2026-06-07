@@ -55,7 +55,7 @@ export default function Home() {
               variants={{ hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0 } }}
               className="font-marathi text-accent-deep text-lg font-bold tracking-wide"
             >
-              घरचं जेवण, घरचं प्रेम
+              घरची चव, घरचं प्रेम
             </motion.p>
             
             <motion.h1 

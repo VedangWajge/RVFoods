@@ -34,6 +34,6 @@ router.post(
   handleUploadError,
   uploadProductImages
 );
-router.delete("/:id/images/:imageId", protect, adminOnly, deleteProductImage);
+router.delete("/:id/images/:imageId(.*)", protect, adminOnly, deleteProductImage);
 
 export default router;

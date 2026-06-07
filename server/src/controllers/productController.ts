@@ -177,9 +177,13 @@ export const deleteProduct = asyncHandler(
 
     // Delete images from Cloudinary
     if (product.images && product.images.length > 0) {
-      const deletePromises = product.images.map((img) =>
-        deleteImage(img.publicId)
-      );
+      const deletePromises = product.images.map(async (img) => {
+        try {
+          await deleteImage(img.publicId);
+        } catch (error) {
+          console.error(`Failed to delete image ${img.publicId} from Cloudinary during product deletion:`, error);
+        }
+      });
       await Promise.all(deletePromises);
     }
 
@@ -250,7 +254,11 @@ export const deleteProductImage = asyncHandler(
     }
 
     // Delete from Cloudinary
-    await deleteImage(imagePublicId);
+    try {
+      await deleteImage(imagePublicId);
+    } catch (error) {
+      console.error(`Failed to delete image ${imagePublicId} from Cloudinary:`, error);
+    }
 
     // Remove from product
     product.images.splice(imageIndex, 1);
