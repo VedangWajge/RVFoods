@@ -402,7 +402,7 @@ export default function Home() {
                 <div className="absolute top-0 right-0 p-4 opacity-10 font-marathi text-8xl">प्रेम</div>
                 <div className="space-y-4">
                   <p className="font-marathi text-primary text-3xl sm:text-4xl font-bold leading-relaxed">
-                    "घरचं जेवण, <br />घरचं प्रेम"
+                    "घरची चव, <br />घरचं प्रेम"
                   </p>
                   <p className="text-text-secondary italic text-sm font-body">
                     Home food, Home love
