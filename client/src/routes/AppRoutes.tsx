@@ -6,13 +6,13 @@ import Home from "@/pages/Home";
 import Products from "@/pages/Products";
 import ProductDetail from "@/pages/ProductDetail";
 import Cart from "@/pages/Cart";
-import Checkout from "@/pages/Checkout";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ResetPassword from "@/pages/ResetPassword";
 import Orders from "@/pages/Orders";
 import Contact from "@/pages/Contact";
 import About from "@/pages/About";
+import HowToOrder from "@/pages/HowToOrder";
 import Dashboard from "@/pages/admin/Dashboard";
 import ManageProducts from "@/pages/admin/ManageProducts";
 import ManageOrders from "@/pages/admin/ManageOrders";
@@ -29,12 +29,12 @@ export default function AppRoutes() {
         <Route path="cart" element={<Cart />} />
         <Route path="about" element={<About />} />
         <Route path="contact" element={<Contact />} />
+        <Route path="how-to-order" element={<HowToOrder />} />
         <Route path="login" element={<Login />} />
         <Route path="register" element={<Register />} />
         <Route path="reset-password" element={<ResetPassword />} />
 
         <Route element={<ProtectedRoute />}>
-          <Route path="checkout" element={<Checkout />} />
           <Route path="orders" element={<Orders />} />
         </Route>
       </Route>

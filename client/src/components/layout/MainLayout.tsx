@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
 import CartDrawer from "../cart/CartDrawer";
+import UPIQRModal, { FloatingUPIButton } from "../payment/UPIQRModal";
 
 const pageVariants = {
   initial: { opacity: 0, y: 12 },
@@ -26,6 +27,10 @@ export default function MainLayout() {
       </motion.main>
       <CartDrawer />
       <Footer />
+      
+      {/* Global Payment QR Modal & Floating Button */}
+      <UPIQRModal />
+      <FloatingUPIButton />
     </div>
   );
 }

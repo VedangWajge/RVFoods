@@ -1,4 +1,4 @@
-﻿import { Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Mail, MapPin, Phone } from "lucide-react";
 import {
   FacebookIcon,
@@ -73,6 +73,11 @@ export default function Footer() {
                   </Link>
                 </li>
               ))}
+              <li>
+                <Link to="/how-to-order" className="footer-link text-sm">
+                  How to Order
+                </Link>
+              </li>
               <li>
                 <Link to="/orders" className="footer-link text-sm">
                   My Orders

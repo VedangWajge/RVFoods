@@ -1,4 +1,4 @@
-﻿import { create } from "zustand";
+import { create } from "zustand";
 
 export type ToastType = "success" | "error" | "info";
 
@@ -10,6 +10,7 @@ interface ToastState {
 interface UIState {
   isMobileMenuOpen: boolean;
   isCartDrawerOpen: boolean;
+  isUPIModalOpen: boolean;
   toast: ToastState | null;
   openMobileMenu: () => void;
   closeMobileMenu: () => void;
@@ -17,6 +18,9 @@ interface UIState {
   openCartDrawer: () => void;
   closeCartDrawer: () => void;
   toggleCartDrawer: () => void;
+  openUPIModal: () => void;
+  closeUPIModal: () => void;
+  toggleUPIModal: () => void;
   showToast: (message: string, type?: ToastType) => void;
   hideToast: () => void;
 }
@@ -24,6 +28,7 @@ interface UIState {
 export const useUIStore = create<UIState>((set) => ({
   isMobileMenuOpen: false,
   isCartDrawerOpen: false,
+  isUPIModalOpen: false,
   toast: null,
 
   openMobileMenu: () => set({ isMobileMenuOpen: true }),
@@ -35,6 +40,11 @@ export const useUIStore = create<UIState>((set) => ({
   closeCartDrawer: () => set({ isCartDrawerOpen: false }),
   toggleCartDrawer: () =>
     set((state) => ({ isCartDrawerOpen: !state.isCartDrawerOpen })),
+
+  openUPIModal: () => set({ isUPIModalOpen: true }),
+  closeUPIModal: () => set({ isUPIModalOpen: false }),
+  toggleUPIModal: () =>
+    set((state) => ({ isUPIModalOpen: !state.isUPIModalOpen })),
 
   showToast: (message, type = "info") => set({ toast: { message, type } }),
   hideToast: () => set({ toast: null }),

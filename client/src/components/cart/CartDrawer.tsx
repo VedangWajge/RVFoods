@@ -99,10 +99,10 @@ export default function CartDrawer() {
 
             <div className="flex flex-col gap-2.5 pt-2">
               <Button
-                onClick={() => handleNavigate("/checkout")}
+                onClick={() => handleNavigate("/cart")}
                 className="w-full h-11 text-sm font-semibold flex items-center justify-center gap-2"
               >
-                Proceed to Checkout <ArrowRight className="w-4 h-4" />
+                Proceed to Order <ArrowRight className="w-4 h-4" />
               </Button>
               <Button
                 onClick={() => handleNavigate("/cart")}

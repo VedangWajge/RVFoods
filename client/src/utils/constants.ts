@@ -69,7 +69,7 @@ export const TRUST_ITEMS = [
 ] as const;
 
 export const DELIVERY_FEE = 49;
-export const FREE_DELIVERY_THRESHOLD = 499;
+export const FREE_DELIVERY_THRESHOLD = 999;
 export const CURRENCY = "INR";
 export const CURRENCY_SYMBOL = "₹";
 

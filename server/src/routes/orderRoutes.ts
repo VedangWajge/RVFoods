@@ -1,7 +1,5 @@
 import { Router } from "express";
 import {
-  createOrder,
-  verifyPayment,
   getMyOrders,
   getOrderById,
   updateOrderStatus,
@@ -14,8 +12,6 @@ const router = Router();
 // All order routes are protected/private
 router.use(protect);
 
-router.post("/", createOrder);
-router.post("/verify-payment", verifyPayment);
 router.get("/my-orders", getMyOrders);
 router.get("/:orderId", getOrderById);
 

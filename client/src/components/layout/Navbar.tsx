@@ -122,9 +122,9 @@ function CartButton() {
               <Button
                 size="sm"
                 className="w-full text-[11px] font-semibold h-8 text-white bg-primary hover:bg-primary-dark"
-                onClick={() => handleNavigate("/checkout")}
+                onClick={() => handleNavigate("/how-to-order")}
               >
-                Checkout
+                How to Order
               </Button>
             </div>
           </div>
