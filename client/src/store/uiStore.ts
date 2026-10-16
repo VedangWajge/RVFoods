@@ -2,9 +2,15 @@ import { create } from "zustand";
 
 export type ToastType = "success" | "error" | "info";
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface ToastState {
   message: string;
   type: ToastType;
+  action?: ToastAction;
 }
 
 interface UIState {
@@ -21,7 +27,7 @@ interface UIState {
   openUPIModal: () => void;
   closeUPIModal: () => void;
   toggleUPIModal: () => void;
-  showToast: (message: string, type?: ToastType) => void;
+  showToast: (message: string, type?: ToastType, action?: ToastAction) => void;
   hideToast: () => void;
 }
 
@@ -46,6 +52,7 @@ export const useUIStore = create<UIState>((set) => ({
   toggleUPIModal: () =>
     set((state) => ({ isUPIModalOpen: !state.isUPIModalOpen })),
 
-  showToast: (message, type = "info") => set({ toast: { message, type } }),
+  showToast: (message, type = "info", action) =>
+    set({ toast: { message, type, action } }),
   hideToast: () => set({ toast: null }),
 }));

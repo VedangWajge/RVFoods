@@ -20,6 +20,7 @@ import {
 
 const ORDER_STATUSES: { value: OrderStatus | ""; label: string }[] = [
   { value: "", label: "All Statuses" },
+  { value: "whatsapp_pending", label: "WhatsApp Pending" },
   { value: "placed", label: "Placed" },
   { value: "confirmed", label: "Confirmed" },
   { value: "processing", label: "Processing" },
@@ -72,6 +73,8 @@ export default function ManageOrders() {
 
   const getOrderStatusBadge = (status: OrderStatus) => {
     switch (status) {
+      case "whatsapp_pending":
+        return "bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-50";
       case "delivered":
         return "bg-success/20 text-success border border-success/30 hover:bg-success/20";
       case "cancelled":
@@ -237,7 +240,7 @@ export default function ManageOrders() {
                             })}
                           </td>
                           <td className="px-6 py-4 font-medium text-text-primary truncate max-w-[150px]">
-                            {customer?.name || "Deleted User"}
+                            {customer?.name || (order.orderStatus === "whatsapp_pending" || !order.userId ? "Guest (WhatsApp)" : "Deleted User")}
                           </td>
                           <td className="px-6 py-4 font-bold text-text-primary">
                             {formatCurrency(order.finalAmount)}
@@ -280,7 +283,7 @@ export default function ManageOrders() {
                                       </h4>
                                       <div className="text-text-secondary leading-relaxed bg-white border border-border p-3.5 rounded-xl">
                                         <p className="font-semibold text-text-primary">
-                                          {customer?.name}
+                                          {customer?.name || (order.orderStatus === "whatsapp_pending" || !order.userId ? "Guest Customer (WhatsApp)" : "Deleted User")}
                                         </p>
                                         <p>{order.shippingAddress.street}</p>
                                         <p>
@@ -398,7 +401,8 @@ export default function ManageOrders() {
                                           }
                                           className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs text-text-primary font-semibold focus:border-primary focus:outline-none"
                                         >
-                                          <option value="placed" disabled>Placed</option>
+                                          <option value="whatsapp_pending">WhatsApp Pending</option>
+                                          <option value="placed">Placed</option>
                                           <option value="confirmed">Confirmed</option>
                                           <option value="processing">Processing</option>
                                           <option value="shipped">Shipped</option>

@@ -1,4 +1,4 @@
-﻿/** RV Foods brand & app constants */
+/** RV Foods brand & app constants */
 
 import type { ProductCategory } from "@/types/product.types";
 import type { OrderStatus } from "@/types/order.types";
@@ -46,6 +46,7 @@ export const ORDER_STATUS_CONFIG: Record<
   OrderStatus,
   { label: string; color: "default" | "secondary" | "success" | "error" }
 > = {
+  whatsapp_pending: { label: "WhatsApp Pending", color: "secondary" },
   placed: { label: "Placed", color: "secondary" },
   confirmed: { label: "Confirmed", color: "default" },
   processing: { label: "Processing", color: "default" },

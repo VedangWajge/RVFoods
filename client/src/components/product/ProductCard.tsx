@@ -121,14 +121,43 @@ export default function ProductCard({ product }: ProductCardProps) {
               )}
             </div>
 
-            <Button
-              onClick={handleAddToCart}
-              disabled={isOutOfStock}
-              className="w-full bg-primary hover:bg-primary-dark text-white rounded-lg font-medium py-2 shadow-sm transition-all duration-200"
-              size="sm"
-            >
-              {isOutOfStock ? "Out of Stock" : "Add to Cart"}
-            </Button>
+            {isOutOfStock ? (
+              <div className="flex flex-col gap-2">
+                <Button
+                  disabled
+                  className="w-full bg-primary hover:bg-primary-dark text-white rounded-lg font-medium py-2 shadow-sm transition-all duration-200"
+                  size="sm"
+                >
+                  Out of Stock
+                </Button>
+                <Button
+                  onClick={(e: React.MouseEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER || "919876543210";
+                    const productInfo = product.weight
+                      ? `${product.name} (${product.weight})`
+                      : product.name;
+                    const message = `Hi! I'm interested in ${productInfo}. It is currently out of stock. Is it possible to arrange it for me?`;
+                    const encodedMessage = encodeURIComponent(message);
+                    const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
+                    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+                  }}
+                  className="w-full bg-[#25D366] hover:bg-[#1ebe57] text-white rounded-lg font-medium py-2 shadow-sm transition-all duration-200"
+                  size="sm"
+                >
+                  Request on WhatsApp
+                </Button>
+              </div>
+            ) : (
+              <Button
+                onClick={handleAddToCart}
+                className="w-full bg-primary hover:bg-primary-dark text-white rounded-lg font-medium py-2 shadow-sm transition-all duration-200"
+                size="sm"
+              >
+                Add to Cart
+              </Button>
+            )}
           </div>
         </div>
       </Link>

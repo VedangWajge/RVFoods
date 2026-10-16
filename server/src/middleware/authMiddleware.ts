@@ -13,8 +13,8 @@ export const protect = asyncHandler(
     const authHeader = req.headers.authorization;
 
     if (!authHeader?.startsWith("Bearer ")) {
-      console.error("[AUTH ERROR] Missing or invalid Authorization header format.");
-      sendError(res, "Not authorized. No token provided.", 401);
+      console.info("[AUTH] Unauthenticated request to protected route: missing Bearer token.");
+      sendError(res, "Please log in to continue.", 401);
       return;
     }
 
@@ -25,8 +25,8 @@ export const protect = asyncHandler(
       const user = await User.findById(decoded.userId);
 
       if (!user) {
-        console.error(`[AUTH ERROR] User not found during token authorization. UserId: ${decoded.userId}`);
-        sendError(res, "User not found", 401);
+        console.warn(`[AUTH] User not found during token authorization. UserId: ${decoded.userId}`);
+        sendError(res, "Please log in to continue.", 401);
         return;
       }
 
@@ -36,12 +36,9 @@ export const protect = asyncHandler(
       if (err.name === "TokenExpiredError") {
         console.warn(`[AUTH] Access token expired: ${err.message}`);
       } else {
-        console.error(`[AUTH ERROR] Token verification failed: ${err.message}`);
-        if (process.env.NODE_ENV !== "production") {
-          console.error(err.stack);
-        }
+        console.warn(`[AUTH] Token verification failed: ${err.message}`);
       }
-      sendError(res, "Not authorized. Invalid or expired token.", 401);
+      sendError(res, "Please log in to continue.", 401);
     }
   }
 );
@@ -57,3 +54,24 @@ export const requireVerified = (
   }
   next();
 };
+
+export const optionalAuth = asyncHandler(
+  async (req: AuthRequest, _res: Response, next: NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return next();
+    }
+
+    const token = authHeader.split(" ")[1];
+    try {
+      const decoded = verifyAccessToken(token);
+      const user = await User.findById(decoded.userId);
+      if (user) {
+        req.user = user;
+      }
+    } catch {
+      // Ignore token verification errors for optional auth (e.g. guest order attempts)
+    }
+    next();
+  }
+);

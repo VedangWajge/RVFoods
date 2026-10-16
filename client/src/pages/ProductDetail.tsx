@@ -148,8 +148,19 @@ export default function ProductDetail() {
   };
 
   const handleBuyWhatsApp = () => {
-    if (isOutOfStock) return;
     const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER || "919XXXXXXXXX";
+
+    if (isOutOfStock) {
+      const productInfo = product.weight
+        ? `${product.name} (${product.weight})`
+        : product.name;
+      const message = `Hi! I'm interested in ${productInfo}. It is currently out of stock. Is it possible to arrange it for me?`;
+      const encodedMessage = encodeURIComponent(message);
+      const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
+      window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
     const totalAmount = product.price * quantity;
     const message = `Hi RV Foods! 🙏 I'd like to order:\n- ${product.name} x${quantity} — ₹${totalAmount}\nTotal: ₹${totalAmount}\n\nPlease share payment details.`;
     const encodedMessage = encodeURIComponent(message);
@@ -342,11 +353,11 @@ export default function ProductDetail() {
                   </Button>
                   <button
                     onClick={handleBuyWhatsApp}
-                    disabled={isOutOfStock}
                     type="button"
-                    className="flex-1 h-12 text-base font-semibold bg-[#25D366] text-white hover:bg-[#1ebe57] rounded-lg px-6 py-2.5 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 h-12 text-base font-semibold bg-[#25D366] text-white hover:bg-[#1ebe57] rounded-lg px-6 py-2.5 flex items-center justify-center gap-2 transition-colors"
                   >
-                    <WhatsAppIcon className="w-5 h-5" /> Buy via WhatsApp
+                    <WhatsAppIcon className="w-5 h-5" />
+                    {isOutOfStock ? "Request on WhatsApp" : "Buy via WhatsApp"}
                   </button>
                 </div>
 
@@ -644,21 +655,22 @@ export default function ProductDetail() {
       </div>
 
       {/* Fixed bottom bar for mobile only */}
-      {!isOutOfStock && (
-        <div className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border px-4 py-3 shadow-[0_-8px_20px_rgba(26,26,26,0.08)] flex items-center justify-between gap-4">
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border px-4 py-3 shadow-[0_-8px_20px_rgba(26,26,26,0.08)] flex items-center justify-between gap-4">
+        {!isOutOfStock && (
           <div className="flex flex-col">
             <span className="text-[10px] uppercase font-bold text-text-muted">Total Price</span>
             <span className="text-base font-extrabold text-primary">{formatCurrency(displayPrice * quantity)}</span>
           </div>
-          <button
-            onClick={handleBuyWhatsApp}
-            type="button"
-            className="flex-grow h-11 bg-[#25D366] text-white hover:bg-[#1ebe57] rounded-lg text-sm font-bold flex items-center justify-center gap-1.5 shadow-md transition-colors"
-          >
-            <WhatsAppIcon className="w-4 h-4 fill-white" /> Order via WhatsApp
-          </button>
-        </div>
-      )}
+        )}
+        <button
+          onClick={handleBuyWhatsApp}
+          type="button"
+          className="flex-grow h-11 bg-[#25D366] text-white hover:bg-[#1ebe57] rounded-lg text-sm font-bold flex items-center justify-center gap-1.5 shadow-md transition-colors"
+        >
+          <WhatsAppIcon className="w-4 h-4 fill-white" />
+          {isOutOfStock ? "Request on WhatsApp" : "Order via WhatsApp"}
+        </button>
+      </div>
     </>
   );
 }

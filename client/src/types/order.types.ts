@@ -1,12 +1,13 @@
-﻿/** Order & checkout types — mirrors server Order model */
+/** Order & checkout types — mirrors server Order model */
 
 import type { Address } from "./user.types";
 
 export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
 
-export type PaymentMethod = "razorpay" | "cod";
+export type PaymentMethod = "razorpay" | "cod" | "whatsapp";
 
 export type OrderStatus =
+  | "whatsapp_pending"
   | "placed"
   | "confirmed"
   | "processing"
@@ -27,7 +28,7 @@ export type ShippingAddress = Address;
 export interface Order {
   _id: string;
   orderId: string;
-  userId: string;
+  userId?: string | { _id: string; name?: string; email?: string } | null;
   products: OrderProductItem[];
   totalAmount: number;
   discount: number;
@@ -105,4 +106,20 @@ export interface OrderTimelineStep {
   completed: boolean;
   active: boolean;
   timestamp?: string;
+}
+
+export interface LogWhatsAppOrderItem {
+  productId: string;
+  quantity: number;
+}
+
+export interface LogWhatsAppOrderPayload {
+  items: LogWhatsAppOrderItem[];
+  promoCode?: string;
+}
+
+export interface LogWhatsAppOrderResponse {
+  orderId: string;
+  finalAmount: number;
+  orderStatus: OrderStatus;
 }

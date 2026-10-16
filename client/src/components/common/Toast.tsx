@@ -1,4 +1,5 @@
-﻿import { useEffect } from "react";
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, CheckCircle, AlertCircle, Info } from "lucide-react";
 import { useUIStore } from "@/store/uiStore";
@@ -11,16 +12,28 @@ const icons = {
 };
 
 export default function Toast() {
+  const navigate = useNavigate();
   const toast = useUIStore((s) => s.toast);
   const hideToast = useUIStore((s) => s.hideToast);
 
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(hideToast, 4000);
+    const timer = setTimeout(hideToast, 5000);
     return () => clearTimeout(timer);
   }, [toast, hideToast]);
 
   const Icon = toast ? icons[toast.type] : Info;
+  const isAuthPrompt = toast?.message === "Please log in to continue.";
+  const showActionButton = Boolean(toast?.action || isAuthPrompt);
+
+  const handleActionClick = () => {
+    if (toast?.action) {
+      toast.action.onClick();
+    } else if (isAuthPrompt) {
+      navigate("/login");
+    }
+    hideToast();
+  };
 
   return (
     <AnimatePresence>
@@ -49,7 +62,18 @@ export default function Toast() {
               )}
               aria-hidden
             />
-            <p className="flex-1 text-sm text-text-primary">{toast.message}</p>
+            <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+              <p className="text-sm text-text-primary leading-snug">{toast.message}</p>
+              {showActionButton && (
+                <button
+                  type="button"
+                  onClick={handleActionClick}
+                  className="self-start text-xs font-bold text-primary hover:text-primary-dark underline py-0.5"
+                >
+                  {toast.action?.label || "Log In"} →
+                </button>
+              )}
+            </div>
             <button
               type="button"
               onClick={hideToast}

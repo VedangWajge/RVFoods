@@ -3,8 +3,111 @@ import { Order } from "../models/Order.js";
 import { Product } from "../models/Product.js";
 import { sendSuccess } from "../utils/apiResponse.js";
 import { asyncHandler, AppError } from "../middleware/errorHandler.js";
-import { updateOrderStatusSchema } from "../validators/orderSchemas.js";
+import {
+  updateOrderStatusSchema,
+  whatsappOrderAttemptSchema,
+} from "../validators/orderSchemas.js";
 import type { AuthRequest } from "../middleware/authMiddleware.js";
+
+// @desc    Record WhatsApp order attempt
+// @route   POST /api/orders/whatsapp-attempt
+// @access  Public / Optional Auth
+export const createWhatsAppOrderAttempt = asyncHandler(
+  async (req: AuthRequest, res: Response) => {
+    const validatedData = whatsappOrderAttemptSchema.parse(req.body);
+    const { items, promoCode } = validatedData;
+
+    const productIds = items.map((item) => item.productId);
+    const products = await Product.find({
+      _id: { $in: productIds },
+      isActive: true,
+    });
+
+    const productMap = new Map<string, (typeof products)[0]>();
+    for (const prod of products) {
+      productMap.set(prod._id.toString(), prod);
+    }
+
+    const orderProducts = [];
+    let subtotal = 0;
+
+    for (const item of items) {
+      const product = productMap.get(item.productId);
+      if (!product) {
+        throw new AppError(
+          `Product with ID ${item.productId} is unavailable or inactive`,
+          400
+        );
+      }
+
+      if (item.quantity <= 0) {
+        throw new AppError(`Invalid quantity for product ${product.name}`, 400);
+      }
+
+      // Trust only the server-side price from MongoDB
+      const unitPrice =
+        typeof product.discountPrice === "number" && product.discountPrice > 0
+          ? product.discountPrice
+          : product.price;
+
+      const itemTotal = unitPrice * item.quantity;
+      subtotal += itemTotal;
+
+      orderProducts.push({
+        productId: product._id,
+        name: product.name,
+        image: product.images?.[0]?.url ?? "",
+        price: unitPrice,
+        quantity: item.quantity,
+      });
+    }
+
+    // Server-side promo calculation
+    let discount = 0;
+    if (promoCode) {
+      const normalizedPromo = promoCode.trim().toUpperCase();
+      if (normalizedPromo === "RVFOODS10") {
+        discount = Math.round(subtotal * 0.1);
+      }
+    }
+
+    const safeDiscount = Math.min(discount, subtotal);
+    // Standard delivery fee convention: ₹49 if subtotal < ₹999, free for ₹999+
+    const deliveryFee = subtotal >= 999 || subtotal === 0 ? 0 : 49;
+    const finalAmount = Math.max(0, subtotal - safeDiscount + deliveryFee);
+
+    const order = new Order({
+      userId: req.user?._id || undefined,
+      products: orderProducts,
+      totalAmount: subtotal,
+      discount: safeDiscount,
+      finalAmount,
+      paymentStatus: "pending",
+      paymentMethod: "whatsapp",
+      orderStatus: "whatsapp_pending",
+      shippingAddress: {
+        street: "Pending confirmation via WhatsApp",
+        city: "WhatsApp Order",
+        state: "Pending",
+        pincode: "000000",
+        country: "India",
+      },
+    });
+
+    await order.save();
+
+    sendSuccess(
+      res,
+      "WhatsApp order attempt recorded successfully",
+      {
+        orderId: order.orderId,
+        finalAmount: order.finalAmount,
+        orderStatus: order.orderStatus,
+      },
+      201
+    );
+  }
+);
 
 // @desc    Get current user's orders
 // @route   GET /api/orders/my-orders
@@ -48,7 +151,11 @@ export const getOrderById = asyncHandler(
     }
 
     // Authorization check: users can only view their own orders unless they are an admin
-    if (order.userId.toString() !== req.user._id.toString() && req.user.role !== "admin") {
+    const isOwner =
+      order.userId && order.userId.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === "admin";
+
+    if (!isOwner && !isAdmin) {
       throw new AppError("Not authorized to view this order", 403);
     }
 

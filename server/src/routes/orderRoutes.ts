@@ -3,13 +3,17 @@ import {
   getMyOrders,
   getOrderById,
   updateOrderStatus,
+  createWhatsAppOrderAttempt,
 } from "../controllers/orderController.js";
-import { protect } from "../middleware/authMiddleware.js";
+import { protect, optionalAuth } from "../middleware/authMiddleware.js";
 import { adminOnly } from "../middleware/adminMiddleware.js";
 
 const router = Router();
 
-// All order routes are protected/private
+// Log WhatsApp order attempt (accessible by both guests and authenticated customers)
+router.post("/whatsapp-attempt", optionalAuth, createWhatsAppOrderAttempt);
+
+// All subsequent order routes are protected/private
 router.use(protect);
 
 router.get("/my-orders", getMyOrders);

@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 interface SendEmailOptions {
   to: string;
@@ -7,66 +7,61 @@ interface SendEmailOptions {
   text?: string;
 }
 
-const isEmailConfigured = (): boolean => {
-  const user = process.env.EMAIL_USER?.trim();
-  const pass = process.env.EMAIL_PASS?.trim();
-  return Boolean(user && pass);
-};
-
-if (!isEmailConfigured()) {
-  const missing: string[] = [];
-  if (!process.env.EMAIL_USER) missing.push("EMAIL_USER");
-  if (!process.env.EMAIL_PASS) missing.push("EMAIL_PASS");
-  console.warn(`[CONFIG ERROR] SMTP Email credentials are missing in server/.env: ${missing.join(", ")}. Emails will run in mock mode.`);
-}
-
-const createTransporter = () => {
-  if (!isEmailConfigured()) {
+const getResendClient = (): Resend | null => {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
     return null;
   }
+  return new Resend(apiKey);
+};
 
-  const user = process.env.EMAIL_USER!.trim();
-  const pass = process.env.EMAIL_PASS!.trim();
-  const host = process.env.SMTP_HOST?.trim() || "smtp.gmail.com";
-  const port = Number(process.env.SMTP_PORT) || 587;
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
+const getFromEmail = (): string => {
+  const from = process.env.RESEND_FROM_EMAIL?.trim();
+  if (from) {
+    return from;
+  }
+  return "RV Foods <onboarding@resend.dev>";
 };
 
 export const sendEmail = async (
   options: SendEmailOptions
 ): Promise<boolean> => {
-  const transporter = createTransporter();
+  const resend = getResendClient();
 
-  if (!transporter) {
+  if (!resend) {
     console.warn(
-      "[CONFIG ERROR] Email send requested, but EMAIL_USER and EMAIL_PASS are missing in server/.env (running in mock mode)."
+      "[CONFIG] RESEND_API_KEY is not configured in backend environment. Email running in mock mode."
     );
-    console.warn(`[Email preview] To: ${options.to} | Subject: ${options.subject}`);
-    console.warn(`[Email preview] ${options.text ?? ""}`);
+    console.info(`[Email preview] To: ${options.to} | Subject: ${options.subject}`);
     return false;
   }
 
+  const from = getFromEmail();
+
   try {
-    await transporter.sendMail({
-      from: `RV Foods <${process.env.EMAIL_USER!.trim()}>`,
+    const { data, error } = await resend.emails.send({
+      from,
       to: options.to,
       subject: options.subject,
       html: options.html,
       text: options.text,
     });
-    console.log(`[Email sent] ${options.subject} → ${options.to}`);
+
+    if (error) {
+      console.error(
+        `[EMAIL ERROR] Resend delivery failed: ${error.name} - ${error.message}`
+      );
+      return false;
+    }
+
+    console.info(
+      `[Email sent via Resend] ${options.subject} → ${options.to} (id: ${data?.id ?? "unknown"})`
+    );
     return true;
   } catch (error: any) {
-    console.error(`[API ERROR] Email send failed: ${error.message}`);
-    if (process.env.NODE_ENV !== "production") {
-      console.error(error.stack);
-    }
+    console.error(
+      `[EMAIL ERROR] Unexpected failure in Resend dispatch: ${error.message}`
+    );
     return false;
   }
 };

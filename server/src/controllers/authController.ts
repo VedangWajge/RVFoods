@@ -1,4 +1,4 @@
-﻿import crypto from "crypto";
+import crypto from "crypto";
 import type { Response } from "express";
 import { User, type IUser } from "../models/User.js";
 import {
@@ -29,7 +29,7 @@ const normalizeOtp = (otp: string): string => otp.trim().replace(/\s/g, "");
 
 const shouldIncludeDevOtp = (emailSent: boolean): boolean =>
   process.env.NODE_ENV === "development" &&
-  (!process.env.EMAIL_USER?.trim() || !emailSent);
+  (!process.env.RESEND_API_KEY?.trim() || !emailSent);
 
 const saveEmailOtp = async (
   userId: IUser["_id"],
@@ -242,7 +242,8 @@ export const refreshToken = asyncHandler(async (req, res) => {
   const cookieToken = req.cookies[REFRESH_COOKIE_NAME] as string | undefined;
 
   if (!cookieToken) {
-    sendError(res, "Refresh token not found", 401);
+    console.info("[AUTH] Refresh token absent in request cookies.");
+    sendError(res, "Please log in to continue.", 401);
     return;
   }
 
@@ -250,16 +251,18 @@ export const refreshToken = asyncHandler(async (req, res) => {
   try {
     decoded = verifyRefreshToken(cookieToken);
   } catch {
+    console.warn("[AUTH] Refresh token expired or verification failed.");
     clearRefreshTokenCookie(res);
-    sendError(res, "Invalid or expired refresh token", 401);
+    sendError(res, "Please log in to continue.", 401);
     return;
   }
 
   const user = await User.findById(decoded.userId).select("+refreshToken");
 
   if (!user || user.refreshToken !== hashToken(cookieToken)) {
+    console.warn("[AUTH] Refresh token mismatch or user not found.");
     clearRefreshTokenCookie(res);
-    sendError(res, "Invalid refresh token", 401);
+    sendError(res, "Please log in to continue.", 401);
     return;
   }
 

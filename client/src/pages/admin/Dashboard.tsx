@@ -93,6 +93,8 @@ export default function Dashboard() {
 
   const getOrderStatusColor = (status: string) => {
     switch (status) {
+      case "whatsapp_pending":
+        return "bg-amber-50 text-amber-800 border border-amber-300";
       case "delivered":
         return "bg-success/20 text-success border border-success/30";
       case "cancelled":
@@ -277,7 +279,7 @@ export default function Dashboard() {
                             {order.orderId}
                           </td>
                           <td className="py-3 truncate max-w-[120px]">
-                            {order.userId?.name || "Deleted User"}
+                            {order.userId?.name || (order.orderStatus === "whatsapp_pending" || !order.userId ? "Guest (WhatsApp)" : "Deleted User")}
                           </td>
                           <td className="py-3 font-medium text-text-primary">
                             {formatCurrency(order.finalAmount)}

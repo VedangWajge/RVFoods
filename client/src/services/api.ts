@@ -1,4 +1,4 @@
-﻿import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import type { ApiResponse } from "@/types/api.types";
 
 const API_URL = import.meta.env.VITE_API_URL as string;
@@ -109,8 +109,75 @@ api.interceptors.response.use(
 
 export const getErrorMessage = (error: unknown): string => {
   if (axios.isAxiosError<ApiResponse>(error)) {
-    return error.response?.data?.message ?? error.message;
+    // 1. Network / connectivity error (no response received from server)
+    if (!error.response) {
+      return "Something went wrong. Please try again later.";
+    }
+
+    const { status, data } = error.response;
+    const msg = data?.message;
+    const requestUrl = error.config?.url ?? "";
+
+    // 2. Server-side internal error (5xx)
+    if (status >= 500) {
+      return "Something went wrong. Please try again later.";
+    }
+
+    // 3. Authentication & session expired errors (401)
+    if (status === 401) {
+      // Do not treat login or register credential failures as expired sessions
+      if (
+        requestUrl.includes("/auth/login") ||
+        requestUrl.includes("/auth/register")
+      ) {
+        return msg || "Invalid email or password.";
+      }
+
+      // If refresh token failed or session is missing / expired
+      return "Please log in to continue.";
+    }
+
+    // 4. Safe user-facing message from server for other expected 4xx errors
+    if (typeof msg === "string" && msg.trim().length > 0) {
+      const lower = msg.toLowerCase();
+      // Filter out low-level technical jargon, stack traces, and internal strings
+      if (
+        lower.includes("refresh token") ||
+        lower.includes("jwt") ||
+        lower.includes("no api found") ||
+        lower.includes("enotfound") ||
+        lower.includes("econnrefused") ||
+        lower.includes("cannot read properties") ||
+        lower.includes("internal server error") ||
+        lower.includes("mongo") ||
+        lower.includes("node_modules")
+      ) {
+        return "Something went wrong. Please try again later.";
+      }
+      return msg;
+    }
+
+    return "Something went wrong. Please try again later.";
   }
-  if (error instanceof Error) return error.message;
-  return "Something went wrong. Please try again.";
+
+  if (error instanceof Error) {
+    const lower = error.message.toLowerCase();
+    if (
+      lower.includes("network error") ||
+      lower.includes("failed to fetch") ||
+      lower.includes("no api found") ||
+      lower.includes("load failed") ||
+      lower.includes("no refresh token")
+    ) {
+      return lower.includes("refresh token")
+        ? "Please log in to continue."
+        : "Something went wrong. Please try again later.";
+    }
+    if (error.message === "Please log in to continue.") {
+      return error.message;
+    }
+    return "Something went wrong. Please try again later.";
+  }
+
+  return "Something went wrong. Please try again later.";
 };

@@ -1,8 +1,9 @@
-﻿import mongoose, { Schema, type Document, type Model, Types } from "mongoose";
+import mongoose, { Schema, type Document, type Model, Types } from "mongoose";
 
 export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
-export type PaymentMethod = "razorpay" | "cod";
+export type PaymentMethod = "razorpay" | "cod" | "whatsapp";
 export type OrderStatus =
+  | "whatsapp_pending"
   | "placed"
   | "confirmed"
   | "processing"
@@ -28,7 +29,7 @@ export interface IShippingAddress {
 
 export interface IOrder extends Document {
   orderId: string;
-  userId: Types.ObjectId;
+  userId?: Types.ObjectId;
   products: IOrderProductItem[];
   totalAmount: number;
   discount: number;
@@ -89,7 +90,7 @@ const orderSchema = new Schema<IOrder>(
     userId: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: false,
       index: true,
     },
     products: {
@@ -121,7 +122,7 @@ const orderSchema = new Schema<IOrder>(
     },
     paymentMethod: {
       type: String,
-      enum: ["razorpay", "cod"],
+      enum: ["razorpay", "cod", "whatsapp"],
       required: true,
     },
     razorpayOrderId: { type: String },
@@ -129,6 +130,7 @@ const orderSchema = new Schema<IOrder>(
     orderStatus: {
       type: String,
       enum: [
+        "whatsapp_pending",
         "placed",
         "confirmed",
         "processing",

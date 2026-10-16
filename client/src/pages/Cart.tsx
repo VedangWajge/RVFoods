@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { useCart } from "@/hooks/useCart";
 import { useUIStore } from "@/store/uiStore";
+import { orderService } from "@/services/orderService";
 import { formatCurrency } from "@/utils/formatCurrency";
 import {
   Trash2,
@@ -13,6 +14,7 @@ import {
   Sparkles,
   ChevronLeft,
   QrCode,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +26,7 @@ const WhatsAppIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
     fill="currentColor"
     className={className}
   >
-    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.003 5.419 5.422.002 12.079.002c3.225.001 6.258 1.257 8.537 3.539 2.279 2.28 3.532 5.317 3.53 8.544-.005 6.661-5.424 12.079-12.081 12.079-2.002-.001-3.972-.5-5.713-1.448L0 24zm6.59-4.846c1.6.95 3.397 1.453 5.24 1.454 5.377 0 9.75-4.372 9.754-9.752.002-2.607-1.013-5.059-2.859-6.904C16.883 2.1 14.436 1.087 11.83 1.087 6.455 1.087 2.084 5.46 2.08 10.835c-.001 1.839.486 3.64 1.411 5.234l-.973 3.548 3.638-.954zm10.933-7.877c-.29-.146-1.72-.85-1.987-.947-.267-.097-.461-.146-.656.146-.195.29-.757.947-.927 1.14-.17.195-.34.218-.63.073-.29-.147-1.228-.452-2.338-1.444-.864-.77-1.448-1.721-1.618-2.013-.17-.29-.018-.447.127-.592.13-.13.29-.34.436-.509.145-.17.195-.29.29-.485.097-.195.05-.364-.025-.509-.073-.146-.656-1.579-.9-2.172-.236-.57-.478-.493-.656-.502-.17-.008-.364-.01-.559-.01-.195 0-.514.073-.78.364-.268.29-1.022.996-1.022 2.43 0 1.433 1.043 2.816 1.189 3.01.145.193 2.052 3.134 4.972 4.39.694.299 1.236.478 1.659.613.698.222 1.332.19 1.833.115.558-.083 1.72-.702 1.963-1.38.243-.678.243-1.258.17-1.38-.074-.121-.268-.194-.559-.34z" />
+    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.003 5.419 5.422.002 12.079.002c3.225.001 6.258 1.257 8.537 3.539 2.279 2.28 3.532 5.317 3.53 8.544-.005 6.661-5.424 12.079-12.081 12.081-2.002-.001-3.972-.5-5.713-1.448L0 24zm6.59-4.846c1.6.95 3.397 1.453 5.24 1.454 5.377 0 9.75-4.372 9.754-9.752.002-2.607-1.013-5.059-2.859-6.904C16.883 2.1 14.436 1.087 11.83 1.087 6.455 1.087 2.084 5.46 2.08 10.835c-.001 1.839.486 3.64 1.411 5.234l-.973 3.548 3.638-.954zm10.933-7.877c-.29-.146-1.72-.85-1.987-.947-.267-.097-.461-.146-.656.146-.195.29-.757.947-.927 1.14-.17.195-.34.218-.63.073-.29-.147-1.228-.452-2.338-1.444-.864-.77-1.448-1.721-1.618-2.013-.17-.29-.018-.447.127-.592.13-.13.29-.34.436-.509.145-.17.195-.29.29-.485.097-.195.05-.364-.025-.509-.073-.146-.656-1.579-.9-2.172-.236-.57-.478-.493-.656-.502-.17-.008-.364-.01-.559-.01-.195 0-.514.073-.78.364-.268.29-1.022.996-1.022 2.43 0 1.433 1.043 2.816 1.189 3.01.145.193 2.052 3.134 4.972 4.39.694.299 1.236.478 1.659.613.698.222 1.332.19 1.833.115.558-.083 1.72-.702 1.963-1.38.243-.678.243-1.258.17-1.38-.074-.121-.268-.194-.559-.34z" />
   </svg>
 );
 
@@ -45,25 +47,55 @@ export default function Cart() {
 
   const showToast = useUIStore((s) => s.showToast);
   const [promoInput, setPromoInput] = useState("");
+  const [isSubmittingWhatsApp, setIsSubmittingWhatsApp] = useState(false);
 
-  const handleWhatsAppOrder = () => {
-    const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER || "919XXXXXXXXX";
-    
-    const itemsText = items
-      .map(
-        (item) =>
-          `- ${item.name} x${item.quantity} — ₹${item.price * item.quantity}`
-      )
-      .join("\n");
-      
-    const message = `Hi RV Foods! 🙏 I'd like to order:\n${itemsText}\nTotal: ₹${summary.total}\n\nPlease share payment details.`;
-    const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
-    
-    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
-    
-    // Open UPI QR modal immediately so they can scan
-    useUIStore.getState().openUPIModal();
+  const handleWhatsAppOrder = async () => {
+    if (isSubmittingWhatsApp || items.length === 0) return;
+    setIsSubmittingWhatsApp(true);
+
+    try {
+      // 1. Log order attempt to backend database
+      await orderService.logWhatsAppOrder({
+        items: items.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        })),
+        promoCode: promoCode || undefined,
+      });
+
+      // 2. Format existing WhatsApp message
+      const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER || "919XXXXXXXXX";
+      const itemsText = items
+        .map(
+          (item) =>
+            `- ${item.name} x${item.quantity} — ₹${item.price * item.quantity}`
+        )
+        .join("\n");
+      const message = `Hi RV Foods! 🙏 I'd like to order:\n${itemsText}\nTotal: ₹${summary.total}\n\nPlease share payment details.`;
+      const encodedMessage = encodeURIComponent(message);
+      const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
+
+      // 3. Open WhatsApp, handling popup-blocker safely
+      try {
+        const opened = window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+        if (!opened || opened.closed || typeof opened.closed === "undefined") {
+          window.location.href = whatsappUrl;
+        }
+      } catch (err) {
+        console.warn("Could not open WhatsApp tab automatically:", err);
+      }
+
+      // 4. Open UPI QR modal immediately so they can scan
+      useUIStore.getState().openUPIModal();
+    } catch (err: any) {
+      console.error("Failed to log WhatsApp order:", err);
+      const errorMessage =
+        err?.response?.data?.message ||
+        "Could not record order attempt. Please check your connection and try again.";
+      showToast(errorMessage, "error");
+    } finally {
+      setIsSubmittingWhatsApp(false);
+    }
   };
 
   const handleApplyPromo = (e: FormEvent) => {
@@ -326,10 +358,20 @@ export default function Cart() {
                     <button
                       type="button"
                       onClick={handleWhatsAppOrder}
-                      className="w-full bg-[#25D366] text-white hover:bg-[#1ebe57] rounded-lg px-6 py-2.5 font-medium flex items-center justify-center gap-2 transition-colors duration-200"
+                      disabled={isSubmittingWhatsApp}
+                      className="w-full bg-[#25D366] text-white hover:bg-[#1ebe57] disabled:opacity-60 disabled:cursor-not-allowed rounded-lg px-6 py-2.5 font-medium flex items-center justify-center gap-2 transition-colors duration-200"
                     >
-                      <WhatsAppIcon className="w-5 h-5" />
-                      Order via WhatsApp
+                      {isSubmittingWhatsApp ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          Recording Order...
+                        </>
+                      ) : (
+                        <>
+                          <WhatsAppIcon className="w-5 h-5" />
+                          Order via WhatsApp
+                        </>
+                      )}
                     </button>
                     <Button
                       type="button"

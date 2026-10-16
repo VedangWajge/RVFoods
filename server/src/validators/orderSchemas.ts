@@ -28,6 +28,7 @@ export const verifyPaymentSchema = z.object({
 
 export const updateOrderStatusSchema = z.object({
   status: z.enum([
+    "whatsapp_pending",
     "placed",
     "confirmed",
     "processing",
@@ -37,6 +38,19 @@ export const updateOrderStatusSchema = z.object({
   ]),
 });
 
+export const whatsappOrderAttemptSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        productId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid product ID"),
+        quantity: z.number().int().positive("Quantity must be a positive integer"),
+      })
+    )
+    .min(1, "Order must contain at least one product"),
+  promoCode: z.string().optional(),
+});
+
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type VerifyPaymentInput = z.infer<typeof verifyPaymentSchema>;
 export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
+export type WhatsAppOrderAttemptInput = z.infer<typeof whatsappOrderAttemptSchema>;
