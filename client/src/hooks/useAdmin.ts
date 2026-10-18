@@ -128,6 +128,30 @@ export function useAdmin() {
     }
   }, [stats, fetchStats]);
 
+  const updateOrderPaymentStatus = useCallback(async (orderId: string, paymentStatus: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await adminService.updateOrderPaymentStatus(orderId, paymentStatus);
+      if (response.success && response.data) {
+        const updatedOrder = response.data;
+        setOrders((prev) => prev.map((o) => (o._id === orderId ? updatedOrder : o)));
+        if (stats) {
+          fetchStats();
+        }
+        return updatedOrder;
+      } else {
+        setError(response.message || "Failed to update payment status");
+        return null;
+      }
+    } catch (err) {
+      setError(getErrorMessage(err));
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [stats, fetchStats]);
+
   return {
     stats,
     users,
@@ -141,5 +165,6 @@ export function useAdmin() {
     fetchProducts,
     updateUser,
     updateOrderStatus,
+    updateOrderPaymentStatus,
   };
 }

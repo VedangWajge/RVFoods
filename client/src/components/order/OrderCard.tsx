@@ -181,7 +181,18 @@ export default function OrderCard({ order }: OrderCardProps) {
                   </span>
                   <div className="space-y-1">
                     <p className="text-xs text-text-primary font-medium">
-                      Method: <span className="uppercase">{order.paymentMethod}</span>
+                      Method:{" "}
+                      <span className="font-semibold">
+                        {order.paymentMethod === "whatsapp" ||
+                        order.orderStatus === "whatsapp_pending" ||
+                        order.shippingAddress?.city === "WhatsApp Order"
+                          ? "WhatsApp UPI"
+                          : order.paymentMethod === "razorpay"
+                          ? "Razorpay"
+                          : order.paymentMethod === "cod"
+                          ? "COD"
+                          : order.paymentMethod.toUpperCase()}
+                      </span>
                     </p>
                     <p className="text-xs text-text-primary">
                       Status: <span className="capitalize font-semibold">{order.paymentStatus}</span>

@@ -4,7 +4,7 @@ import type { Address } from "./user.types";
 
 export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
 
-export type PaymentMethod = "razorpay" | "cod" | "whatsapp";
+export type PaymentMethod = "razorpay" | "cod" | "whatsapp" | "upi";
 
 export type OrderStatus =
   | "whatsapp_pending"
@@ -77,6 +77,10 @@ export interface UpdateOrderStatusPayload {
   orderStatus: OrderStatus;
 }
 
+export interface UpdateOrderPaymentStatusPayload {
+  paymentStatus: PaymentStatus;
+}
+
 /** Checkout flow — multi-step form state */
 export interface CheckoutFormState {
   step: 1 | 2;
@@ -116,6 +120,7 @@ export interface LogWhatsAppOrderItem {
 export interface LogWhatsAppOrderPayload {
   items: LogWhatsAppOrderItem[];
   promoCode?: string;
+  attemptId?: string;
 }
 
 export interface LogWhatsAppOrderResponse {

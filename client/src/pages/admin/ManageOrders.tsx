@@ -16,11 +16,13 @@ import {
   CreditCard,
   Truck,
   Clock,
+  MessageCircle,
+  Globe,
+  IndianRupee,
 } from "lucide-react";
 
 const ORDER_STATUSES: { value: OrderStatus | ""; label: string }[] = [
   { value: "", label: "All Statuses" },
-  { value: "whatsapp_pending", label: "WhatsApp Pending" },
   { value: "placed", label: "Placed" },
   { value: "confirmed", label: "Confirmed" },
   { value: "processing", label: "Processing" },
@@ -38,8 +40,11 @@ const PAYMENT_STATUSES: { value: PaymentStatus | ""; label: string }[] = [
 ];
 
 export default function ManageOrders() {
-  const { orders, loading, fetchOrders, updateOrderStatus } = useAdmin();
+  const { orders, loading, fetchOrders, updateOrderStatus, updateOrderPaymentStatus } = useAdmin();
   const showToast = useUIStore((s) => s.showToast);
+
+  // Active Tab state ("orders" for confirmed orders, "whatsapp_attempts" for unconfirmed attempts / WhatsApp flow)
+  const [activeTab, setActiveTab] = useState<"orders" | "whatsapp_attempts">("orders");
 
   // Filter & Search states
   const [searchTerm, setSearchTerm] = useState("");
@@ -51,6 +56,7 @@ export default function ManageOrders() {
 
   // Loading state per order status update
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [updatingPaymentId, setUpdatingPaymentId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchOrders();
@@ -69,6 +75,61 @@ export default function ManageOrders() {
     } else {
       showToast("Failed to update order status", "error");
     }
+  };
+
+  const handlePaymentStatusChange = async (orderId: string, newPaymentStatus: PaymentStatus) => {
+    setUpdatingPaymentId(orderId);
+    const updated = await updateOrderPaymentStatus(orderId, newPaymentStatus);
+    setUpdatingPaymentId(null);
+    if (updated) {
+      showToast(`Payment status updated to ${newPaymentStatus}`, "success");
+    } else {
+      showToast("Failed to update payment status", "error");
+    }
+  };
+
+  const handlePromote = async (orderId: string, customOrderId: string) => {
+    setUpdatingId(orderId);
+    const updated = await updateOrderStatus(orderId, "placed");
+    setUpdatingId(null);
+    if (updated) {
+      showToast(`Order ${customOrderId} promoted to Placed successfully!`, "success");
+    } else {
+      showToast("Failed to promote order", "error");
+    }
+  };
+
+  const isWhatsAppOrder = (order: {
+    paymentMethod?: string;
+    orderStatus?: string;
+    shippingAddress?: { city?: string; street?: string };
+  }) => {
+    return (
+      order.paymentMethod === "whatsapp" ||
+      order.orderStatus === "whatsapp_pending" ||
+      order.shippingAddress?.city === "WhatsApp Order" ||
+      Boolean(order.shippingAddress?.street && order.shippingAddress.street.toLowerCase().includes("whatsapp"))
+    );
+  };
+
+  const getPaymentMethodDisplay = (order: {
+    paymentMethod?: string;
+    orderStatus?: string;
+    shippingAddress?: { city?: string; street?: string };
+  }) => {
+    if (isWhatsAppOrder(order)) {
+      return "WhatsApp UPI";
+    }
+    if (order.paymentMethod === "razorpay") {
+      return "Razorpay";
+    }
+    if (order.paymentMethod === "cod") {
+      return "COD";
+    }
+    if (order.paymentMethod === "upi") {
+      return "UPI";
+    }
+    return (order.paymentMethod || "COD").toUpperCase();
   };
 
   const getOrderStatusBadge = (status: OrderStatus) => {
@@ -105,24 +166,34 @@ export default function ManageOrders() {
     }
   };
 
-  // Filter logic
-  const filteredOrders = orders.filter((order) => {
+  // Filter logic separated by active tab
+  const tabOrders = orders.filter((order) => {
+    if (activeTab === "whatsapp_attempts") {
+      return order.orderStatus === "whatsapp_pending" || order.paymentMethod === "whatsapp";
+    }
+    return order.orderStatus !== "whatsapp_pending";
+  });
+
+  const filteredOrders = tabOrders.filter((order) => {
     const matchesSearch =
       order.orderId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (order.userId &&
         typeof order.userId === "object" &&
-        ("name" in order.userId) &&
-        (order.userId as any).name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        order.userId.name &&
+        order.userId.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (order.userId &&
         typeof order.userId === "object" &&
-        ("email" in order.userId) &&
-        (order.userId as any).email.toLowerCase().includes(searchTerm.toLowerCase()));
+        order.userId.email &&
+        order.userId.email.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesStatus = statusFilter === "" || order.orderStatus === statusFilter;
     const matchesPayment = paymentFilter === "" || order.paymentStatus === paymentFilter;
 
     return matchesSearch && matchesStatus && matchesPayment;
   });
+
+  const unconfirmedCount = orders.filter((o) => o.orderStatus === "whatsapp_pending").length;
+  const confirmedCount = orders.filter((o) => o.orderStatus !== "whatsapp_pending").length;
 
   return (
     <>
@@ -138,6 +209,50 @@ export default function ManageOrders() {
           <p className="text-sm text-text-secondary">
             View orders details, update tracking status, and monitor transaction states.
           </p>
+        </div>
+
+        {/* Section Tabs */}
+        <div className="flex border-b border-border space-x-2">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("orders");
+              setStatusFilter("");
+            }}
+            className={`pb-3 px-4 text-sm font-semibold flex items-center gap-2 border-b-2 transition-colors ${
+              activeTab === "orders"
+                ? "border-primary text-primary"
+                : "border-transparent text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            <span>Confirmed Orders</span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-background border border-border">
+              {confirmedCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("whatsapp_attempts");
+              setStatusFilter("");
+            }}
+            className={`pb-3 px-4 text-sm font-semibold flex items-center gap-2 border-b-2 transition-colors ${
+              activeTab === "whatsapp_attempts"
+                ? "border-primary text-primary"
+                : "border-transparent text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            <span>WhatsApp Attempts</span>
+            {unconfirmedCount > 0 ? (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">
+                {unconfirmedCount} unconfirmed
+              </span>
+            ) : (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-background border border-border">
+                {orders.filter((o) => o.paymentMethod === "whatsapp").length}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Filters and search panel */}
@@ -186,9 +301,13 @@ export default function ManageOrders() {
         ) : filteredOrders.length === 0 ? (
           <div className="text-center py-16 bg-white border border-border rounded-xl">
             <div className="text-4xl mb-2">📋</div>
-            <h3 className="font-heading text-lg font-bold text-text-primary">No orders found</h3>
+            <h3 className="font-heading text-lg font-bold text-text-primary">
+              {activeTab === "whatsapp_attempts" ? "No WhatsApp attempts found" : "No orders found"}
+            </h3>
             <p className="text-sm text-text-secondary mt-1 max-w-sm mx-auto">
-              No orders matched your search filters. Try resetting the dropdowns or check back later.
+              {activeTab === "whatsapp_attempts"
+                ? "No WhatsApp order attempts match your current filters."
+                : "No orders matched your search filters. Try resetting the dropdowns or check back later."}
             </p>
           </div>
         ) : (
@@ -202,9 +321,13 @@ export default function ManageOrders() {
                     <th className="px-6 py-4">Date</th>
                     <th className="px-6 py-4">Customer</th>
                     <th className="px-6 py-4">Total Amount</th>
-                    <th className="px-6 py-4">Method</th>
-                    <th className="px-6 py-4">Payment</th>
+                    <th className="px-6 py-4">Channel</th>
+                    <th className="px-6 py-4">Payment Method</th>
+                    <th className="px-6 py-4">Payment Status</th>
                     <th className="px-6 py-4">Order Status</th>
+                    {activeTab === "whatsapp_attempts" && (
+                      <th className="px-6 py-4">Promotion Action</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -212,7 +335,7 @@ export default function ManageOrders() {
                     const isExpanded = expandedOrderId === order._id;
                     const customer =
                       order.userId && typeof order.userId === "object"
-                        ? (order.userId as any)
+                        ? order.userId
                         : null;
 
                     return (
@@ -245,12 +368,25 @@ export default function ManageOrders() {
                           <td className="px-6 py-4 font-bold text-text-primary">
                             {formatCurrency(order.finalAmount)}
                           </td>
-                          <td className="px-6 py-4 uppercase text-text-secondary text-xs font-bold">
-                            {order.paymentMethod}
+                          <td className="px-6 py-4">
+                            {isWhatsAppOrder(order) ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <MessageCircle className="h-3 w-3 text-emerald-600" />
+                                WhatsApp
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-50 text-text-secondary border border-border">
+                                <Globe className="h-3 w-3 text-text-muted" />
+                                Website
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-xs font-semibold text-text-primary">
+                            {getPaymentMethodDisplay(order)}
                           </td>
                           <td className="px-6 py-4">
                             <span
-                              className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${getPaymentStatusBadge(
+                              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${getPaymentStatusBadge(
                                 order.paymentStatus
                               )}`}
                             >
@@ -259,16 +395,41 @@ export default function ManageOrders() {
                           </td>
                           <td className="px-6 py-4">
                             <Badge className={`px-2 py-0.5 text-xs font-bold uppercase hover:bg-transparent ${getOrderStatusBadge(order.orderStatus)}`}>
-                              {order.orderStatus}
+                              {order.orderStatus === "whatsapp_pending" ? "Unconfirmed (Draft)" : order.orderStatus}
                             </Badge>
                           </td>
+                          {activeTab === "whatsapp_attempts" && (
+                            <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                              {order.orderStatus === "whatsapp_pending" ? (
+                                <button
+                                  type="button"
+                                  disabled={updatingId === order._id}
+                                  onClick={() => handlePromote(order._id, order.orderId)}
+                                  className="bg-primary hover:bg-primary-dark disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                                >
+                                  {updatingId === order._id ? (
+                                    <>
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      Promoting...
+                                    </>
+                                  ) : (
+                                    "Promote to Placed"
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="text-xs text-text-muted font-medium">
+                                  ✓ Placed (Confirmed)
+                                </span>
+                              )}
+                            </td>
+                          )}
                         </tr>
 
                         {/* Collapsible Details Row */}
                         <AnimatePresence>
                           {isExpanded && (
                             <tr className="bg-background/40">
-                              <td colSpan={8} className="p-6 border-b border-border">
+                              <td colSpan={activeTab === "whatsapp_attempts" ? 10 : 9} className="p-6 border-b border-border">
                                 <motion.div
                                   initial={{ opacity: 0, height: 0 }}
                                   animate={{ opacity: 1, height: "auto" }}
@@ -295,23 +456,49 @@ export default function ManageOrders() {
                                         </p>
                                       </div>
                                     </div>
-                                    <div className="flex gap-4">
-                                      <div className="flex-1 bg-white border border-border p-3 rounded-xl">
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div className="bg-white border border-border p-3 rounded-xl">
+                                        <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">
+                                          Order Channel
+                                        </span>
+                                        <span className="font-semibold text-text-primary flex items-center gap-1.5 text-xs">
+                                          {isWhatsAppOrder(order) ? (
+                                            <>
+                                              <MessageCircle className="h-3.5 w-3.5 text-emerald-600" />
+                                              WhatsApp
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Globe className="h-3.5 w-3.5 text-primary" />
+                                              Website
+                                            </>
+                                          )}
+                                        </span>
+                                      </div>
+                                      <div className="bg-white border border-border p-3 rounded-xl">
                                         <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">
                                           Payment Method
                                         </span>
-                                        <span className="font-semibold text-text-primary uppercase flex items-center gap-1.5 text-xs">
+                                        <span className="font-semibold text-text-primary flex items-center gap-1.5 text-xs">
                                           <CreditCard className="h-3.5 w-3.5 text-primary" />
-                                          {order.paymentMethod === "razorpay" ? "Razorpay" : "COD"}
+                                          {getPaymentMethodDisplay(order)}
                                         </span>
                                       </div>
-                                      <div className="flex-1 bg-white border border-border p-3 rounded-xl">
+                                      <div className="bg-white border border-border p-3 rounded-xl">
                                         <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">
-                                          Total Weight
+                                          Payment Status
+                                        </span>
+                                        <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${getPaymentStatusBadge(order.paymentStatus)}`}>
+                                          {order.paymentStatus}
+                                        </span>
+                                      </div>
+                                      <div className="bg-white border border-border p-3 rounded-xl">
+                                        <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">
+                                          Total Items
                                         </span>
                                         <span className="font-semibold text-text-primary text-xs flex items-center gap-1.5">
                                           <Truck className="h-3.5 w-3.5 text-primary" />
-                                          {order.products.length} Items
+                                          {order.products.length} Products
                                         </span>
                                       </div>
                                     </div>
@@ -375,40 +562,78 @@ export default function ManageOrders() {
                                       </div>
                                     </div>
 
-                                    {/* Order Status Action Selector */}
-                                    <div className="bg-primary/5 border border-primary/15 p-4 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                      <div>
-                                        <h5 className="font-semibold text-text-primary text-xs">
-                                          Update Shipping State
-                                        </h5>
-                                        <p className="text-[10px] text-text-secondary mt-0.5">
-                                          Updating the status changes order timeline on customer's page.
-                                        </p>
+                                    {/* Order and Payment Status Action Selectors */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                      {/* Order Shipping Status */}
+                                      <div className="bg-primary/5 border border-primary/15 p-4 rounded-xl flex flex-col justify-between gap-3">
+                                        <div>
+                                          <h5 className="font-semibold text-text-primary text-xs flex items-center gap-1.5">
+                                            <Truck className="h-3.5 w-3.5 text-primary" />
+                                            Update Shipping Status
+                                          </h5>
+                                          <p className="text-[10px] text-text-secondary mt-0.5">
+                                            Changes shipping timeline shown to the customer.
+                                          </p>
+                                        </div>
+                                        
+                                        <div className="flex items-center gap-2 mt-1">
+                                          {updatingId === order._id ? (
+                                            <div className="flex items-center gap-1 text-xs text-primary font-medium pr-2">
+                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                              <span>Saving...</span>
+                                            </div>
+                                          ) : null}
+                                          <select
+                                            disabled={updatingId === order._id || order.orderStatus === "cancelled" || order.orderStatus === "delivered"}
+                                            value={order.orderStatus}
+                                            onChange={(e) =>
+                                              handleStatusChange(order._id, e.target.value as OrderStatus)
+                                            }
+                                            className="w-full rounded-lg border border-border bg-white px-3 py-1.5 text-xs text-text-primary font-semibold focus:border-primary focus:outline-none"
+                                          >
+                                            <option value="placed">Placed</option>
+                                            <option value="confirmed">Confirmed</option>
+                                            <option value="processing">Processing</option>
+                                            <option value="shipped">Shipped</option>
+                                            <option value="delivered">Delivered</option>
+                                            <option value="cancelled">Cancelled / Refund</option>
+                                          </select>
+                                        </div>
                                       </div>
-                                      
-                                      <div className="flex items-center gap-2">
-                                        {updatingId === order._id ? (
-                                          <div className="flex items-center gap-1 text-xs text-primary font-medium pr-2">
-                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                            <span>Saving...</span>
-                                          </div>
-                                        ) : null}
-                                        <select
-                                          disabled={updatingId === order._id || order.orderStatus === "cancelled" || order.orderStatus === "delivered"}
-                                          value={order.orderStatus}
-                                          onChange={(e) =>
-                                            handleStatusChange(order._id, e.target.value as OrderStatus)
-                                          }
-                                          className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs text-text-primary font-semibold focus:border-primary focus:outline-none"
-                                        >
-                                          <option value="whatsapp_pending">WhatsApp Pending</option>
-                                          <option value="placed">Placed</option>
-                                          <option value="confirmed">Confirmed</option>
-                                          <option value="processing">Processing</option>
-                                          <option value="shipped">Shipped</option>
-                                          <option value="delivered">Delivered</option>
-                                          <option value="cancelled">Cancelled / Refund</option>
-                                        </select>
+
+                                      {/* Payment Status */}
+                                      <div className="bg-emerald-50/50 border border-emerald-200/60 p-4 rounded-xl flex flex-col justify-between gap-3">
+                                        <div>
+                                          <h5 className="font-semibold text-text-primary text-xs flex items-center gap-1.5">
+                                            <IndianRupee className="h-3.5 w-3.5 text-emerald-700" />
+                                            Update Payment Status
+                                          </h5>
+                                          <p className="text-[10px] text-text-secondary mt-0.5">
+                                            Verify payment confirmation (e.g. WhatsApp UPI / manual transfers).
+                                          </p>
+                                        </div>
+                                        
+                                        <div className="flex items-center gap-2 mt-1">
+                                          {updatingPaymentId === order._id ? (
+                                            <div className="flex items-center gap-1 text-xs text-emerald-700 font-medium pr-2">
+                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                              <span>Updating...</span>
+                                            </div>
+                                          ) : null}
+                                          <select
+                                            disabled={updatingPaymentId === order._id}
+                                            value={order.paymentStatus}
+                                            onChange={(e) =>
+                                              handlePaymentStatusChange(order._id, e.target.value as PaymentStatus)
+                                            }
+                                            className="w-full rounded-lg border border-border bg-white px-3 py-1.5 text-xs text-text-primary font-semibold focus:border-emerald-600 focus:outline-none"
+                                          >
+                                            <option value="pending">Pending</option>
+                                            <option value="paid">Paid</option>
+                                            <option value="failed">Failed</option>
+                                            <option value="refunded">Refunded</option>
+                                          </select>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>

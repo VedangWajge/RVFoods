@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { useCart } from "@/hooks/useCart";
@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   QrCode,
   Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,27 +44,79 @@ export default function Cart() {
     removeItem,
     applyPromoCode,
     clearPromoCode,
+    clearCart,
   } = useCart();
 
   const showToast = useUIStore((s) => s.showToast);
   const [promoInput, setPromoInput] = useState("");
   const [isSubmittingWhatsApp, setIsSubmittingWhatsApp] = useState(false);
 
+  // Active WhatsApp order draft reference
+  const [activeAttemptId, setActiveAttemptId] = useState<string | null>(() => {
+    return sessionStorage.getItem("rvf_whatsapp_attempt_id");
+  });
+
+  // Return-to-site confirmation prompt modal state
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  // Confirmed order state for celebratory screen
+  const [confirmedOrder, setConfirmedOrder] = useState<{
+    orderId: string;
+    finalAmount: number;
+  } | null>(null);
+
+  // Prompt the customer when returning to the website after starting WhatsApp order
+  useEffect(() => {
+    const handleReturn = () => {
+      const awaitingId = sessionStorage.getItem("rvf_awaiting_wa_confirm");
+      if (awaitingId && items.length > 0) {
+        setShowConfirmModal(true);
+      }
+    };
+
+    window.addEventListener("focus", handleReturn);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        handleReturn();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.removeEventListener("focus", handleReturn);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [items.length]);
+
   const handleWhatsAppOrder = async () => {
     if (isSubmittingWhatsApp || items.length === 0) return;
     setIsSubmittingWhatsApp(true);
 
+    // Synchronously open a blank tab during the user click to prevent popup blockers after await
+    const newTab = window.open("about:blank", "_blank");
+
     try {
-      // 1. Log order attempt to backend database
-      await orderService.logWhatsAppOrder({
+      // 1. Log or reuse lightweight order attempt in backend database
+      const response = await orderService.logWhatsAppOrder({
         items: items.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,
         })),
         promoCode: promoCode || undefined,
+        attemptId: activeAttemptId || undefined,
       });
 
-      // 2. Format existing WhatsApp message
+      if (!response.data?.orderId) {
+        throw new Error(response.message || "Could not record order attempt.");
+      }
+
+      const orderRef = response.data.orderId;
+      setActiveAttemptId(orderRef);
+      sessionStorage.setItem("rvf_whatsapp_attempt_id", orderRef);
+      sessionStorage.setItem("rvf_awaiting_wa_confirm", orderRef);
+
+      // 2. Format WhatsApp message including the unique order reference ID
       const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER || "919XXXXXXXXX";
       const itemsText = items
         .map(
@@ -71,31 +124,78 @@ export default function Cart() {
             `- ${item.name} x${item.quantity} — ₹${item.price * item.quantity}`
         )
         .join("\n");
-      const message = `Hi RV Foods! 🙏 I'd like to order:\n${itemsText}\nTotal: ₹${summary.total}\n\nPlease share payment details.`;
+      const message = `Hi RV Foods! 🙏 I'd like to order:\nOrder Ref: ${orderRef}\n\n${itemsText}\n\nTotal: ₹${summary.total}\n\nPlease share payment details.`;
       const encodedMessage = encodeURIComponent(message);
       const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
 
-      // 3. Open WhatsApp, handling popup-blocker safely
-      try {
-        const opened = window.open(whatsappUrl, "_blank", "noopener,noreferrer");
-        if (!opened || opened.closed || typeof opened.closed === "undefined") {
-          window.location.href = whatsappUrl;
-        }
-      } catch (err) {
-        console.warn("Could not open WhatsApp tab automatically:", err);
+      // 3. Navigate the opened tab to WhatsApp
+      if (newTab && !newTab.closed) {
+        newTab.location.href = whatsappUrl;
+      } else {
+        window.open(whatsappUrl, "_blank", "noopener,noreferrer");
       }
 
       // 4. Open UPI QR modal immediately so they can scan
       useUIStore.getState().openUPIModal();
-    } catch (err: any) {
+    } catch (err) {
+      if (newTab && !newTab.closed) {
+        newTab.close();
+      }
       console.error("Failed to log WhatsApp order:", err);
+      const apiError = err as { response?: { data?: { message?: string } }; message?: string };
       const errorMessage =
-        err?.response?.data?.message ||
+        apiError?.response?.data?.message ||
+        apiError?.message ||
         "Could not record order attempt. Please check your connection and try again.";
       showToast(errorMessage, "error");
     } finally {
       setIsSubmittingWhatsApp(false);
     }
+  };
+
+  const handleConfirmYes = async () => {
+    const orderIdToConfirm =
+      activeAttemptId || sessionStorage.getItem("rvf_awaiting_wa_confirm");
+    if (!orderIdToConfirm) return;
+
+    setIsConfirming(true);
+    try {
+      const res = await orderService.confirmWhatsAppOrder(orderIdToConfirm);
+      if (res.success) {
+        // Clear cart ONLY after successful confirmation & persistence
+        clearCart();
+        sessionStorage.removeItem("rvf_awaiting_wa_confirm");
+        sessionStorage.removeItem("rvf_whatsapp_attempt_id");
+        setActiveAttemptId(null);
+        setShowConfirmModal(false);
+        setConfirmedOrder({
+          orderId: orderIdToConfirm,
+          finalAmount: summary.total,
+        });
+        showToast(
+          `Order confirmed successfully! Reference: ${orderIdToConfirm}`,
+          "success"
+        );
+      } else {
+        showToast(res.message || "Failed to confirm order", "error");
+      }
+    } catch (err) {
+      console.error("Failed to confirm WhatsApp order:", err);
+      const apiError = err as { response?: { data?: { message?: string } }; message?: string };
+      const errorMessage =
+        apiError?.response?.data?.message ||
+        apiError?.message ||
+        "Could not confirm order. Please check your connection and try again.";
+      showToast(errorMessage, "error");
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  const handleConfirmNo = () => {
+    // Keep cart and draft; do not create another confirmed order
+    sessionStorage.removeItem("rvf_awaiting_wa_confirm");
+    setShowConfirmModal(false);
   };
 
   const handleApplyPromo = (e: FormEvent) => {
@@ -126,6 +226,70 @@ export default function Cart() {
         />
       </Helmet>
 
+      {/* WhatsApp Confirmation Prompt Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl border border-border shadow-xl p-6 sm:p-8 max-w-md w-full relative z-10 text-center">
+            <div className="w-14 h-14 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 mx-auto mb-4">
+              <WhatsAppIcon className="w-7 h-7" />
+            </div>
+
+            <h3 className="font-playfair text-xl sm:text-2xl font-bold text-text-primary mb-2">
+              Did you send this order on WhatsApp?
+            </h3>
+
+            <p className="text-xs sm:text-sm text-text-secondary mb-4">
+              Order Reference:{" "}
+              <span className="font-mono font-bold text-primary">
+                {activeAttemptId || sessionStorage.getItem("rvf_awaiting_wa_confirm")}
+              </span>
+            </p>
+
+            <div className="bg-[#FDFAF6] border border-border rounded-xl p-3.5 mb-6 text-xs text-text-secondary flex justify-between items-center">
+              <span>{items.length} unique items in cart</span>
+              <span className="font-bold text-text-primary text-sm">
+                Total: {formatCurrency(summary.total)}
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              <Button
+                type="button"
+                onClick={handleConfirmYes}
+                disabled={isConfirming}
+                className="w-full bg-[#25D366] hover:bg-[#1ebe57] text-white font-semibold h-11 flex items-center justify-center gap-2 shadow-sm"
+              >
+                {isConfirming ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Confirming Order...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    Yes, I placed the order
+                  </>
+                )}
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleConfirmNo}
+                disabled={isConfirming}
+                className="w-full border-border font-medium h-11 text-text-secondary hover:text-text-primary"
+              >
+                No, not yet
+              </Button>
+            </div>
+
+            <p className="text-[11px] text-text-muted mt-4">
+              Selecting "No, not yet" keeps your cart and draft intact so you can continue shopping.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="bg-[#FDFAF6] min-h-screen py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
@@ -133,7 +297,9 @@ export default function Cart() {
             <div>
               <h1 className="font-playfair text-3xl font-bold text-text-primary">Your Shopping Cart</h1>
               <p className="mt-2 text-text-secondary text-sm">
-                You have {items.length} unique items in your basket.
+                {isEmpty
+                  ? "Your basket is currently empty."
+                  : `You have ${items.length} unique item${items.length === 1 ? "" : "s"} in your basket.`}
               </p>
             </div>
             <Link to="/products" className="hidden sm:flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary-dark transition-colors">
@@ -142,35 +308,88 @@ export default function Cart() {
           </div>
 
           {isEmpty ? (
-            /* Empty State */
-            <div className="bg-white rounded-2xl border border-border p-12 text-center max-w-xl mx-auto shadow-sm">
-              <div className="w-20 h-20 rounded-full bg-[#FDFAF6] border border-border flex items-center justify-center text-3xl mx-auto mb-6">
-                🛒
-              </div>
-              <h2 className="font-playfair text-2xl font-bold text-text-primary mb-2">
-                Your basket is empty
-              </h2>
-              <p className="text-text-secondary text-sm mb-8">
-                It looks like you haven't added any products to your cart yet. Explore our authentic masale, pure ghee, and mouth-watering anarase!
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link to="/products">
-                  <Button variant="default" className="w-full sm:w-auto font-semibold px-8 h-11">
-                    Explore Our Products
+            confirmedOrder ? (
+              /* Celebratory Confirmed Order State */
+              <div className="bg-white rounded-2xl border border-success/30 p-8 sm:p-12 text-center max-w-xl mx-auto shadow-sm">
+                <div className="w-20 h-20 rounded-full bg-success/10 border border-success/20 flex items-center justify-center text-4xl mx-auto mb-6">
+                  🎉
+                </div>
+                <h2 className="font-playfair text-2xl sm:text-3xl font-bold text-text-primary mb-2">
+                  Order Placed Successfully!
+                </h2>
+                <p className="text-text-secondary text-sm mb-4">
+                  Thank you for ordering with RV Foods. Your order has been recorded with reference:
+                </p>
+                <div className="inline-block bg-primary/10 border border-primary/20 px-4 py-2 rounded-xl font-mono text-base font-bold text-primary mb-6">
+                  {confirmedOrder.orderId}
+                </div>
+                <p className="text-xs text-text-muted mb-8 max-w-md mx-auto">
+                  Our team has received your order and will confirm delivery details with you on WhatsApp shortly. If you haven't completed UPI payment yet, feel free to scan the QR code.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <Button
+                    variant="outline"
+                    onClick={() => useUIStore.getState().openUPIModal()}
+                    className="w-full sm:w-auto font-semibold px-6 h-11 border-border bg-white"
+                  >
+                    <QrCode className="w-4 h-4 mr-2" /> Pay via UPI QR
                   </Button>
-                </Link>
-                <Link to="/">
-                  <Button variant="outline" className="w-full sm:w-auto font-semibold px-8 h-11 border-border bg-white">
-                    Go to Homepage
-                  </Button>
-                </Link>
+                  <Link to="/products">
+                    <Button variant="default" className="w-full sm:w-auto font-semibold px-8 h-11">
+                      Continue Shopping
+                    </Button>
+                  </Link>
+                </div>
               </div>
-            </div>
+            ) : (
+              /* Standard Empty State */
+              <div className="bg-white rounded-2xl border border-border p-12 text-center max-w-xl mx-auto shadow-sm">
+                <div className="w-20 h-20 rounded-full bg-[#FDFAF6] border border-border flex items-center justify-center text-3xl mx-auto mb-6">
+                  🛒
+                </div>
+                <h2 className="font-playfair text-2xl font-bold text-text-primary mb-2">
+                  Your basket is empty
+                </h2>
+                <p className="text-text-secondary text-sm mb-8">
+                  It looks like you haven't added any products to your cart yet. Explore our authentic masale, pure ghee, and mouth-watering anarase!
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <Link to="/products">
+                    <Button variant="default" className="w-full sm:w-auto font-semibold px-8 h-11">
+                      Explore Our Products
+                    </Button>
+                  </Link>
+                  <Link to="/">
+                    <Button variant="outline" className="w-full sm:w-auto font-semibold px-8 h-11 border-border bg-white">
+                      Go to Homepage
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            )
           ) : (
             /* Cart Grid */
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
               {/* Left Column: Cart Items List */}
               <div className="lg:col-span-8 space-y-4">
+                {/* Active Draft Banner if attempt exists */}
+                {activeAttemptId && (
+                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs shadow-sm">
+                    <div className="flex items-center gap-2 text-text-primary">
+                      <WhatsAppIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>
+                        Active WhatsApp order draft: <span className="font-mono font-bold text-primary">{activeAttemptId}</span>
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmModal(true)}
+                      className="text-primary hover:underline font-bold text-xs shrink-0 text-left sm:text-right"
+                    >
+                      Confirm WhatsApp order →
+                    </button>
+                  </div>
+                )}
                 {/* Free shipping progress indicator */}
                 {!summary.qualifiesForFreeDelivery ? (
                   <div className="bg-accent-light/20 border border-accent/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">

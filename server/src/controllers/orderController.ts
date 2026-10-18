@@ -1,21 +1,24 @@
 import type { Response } from "express";
+import { Types } from "mongoose";
 import { Order } from "../models/Order.js";
 import { Product } from "../models/Product.js";
 import { sendSuccess } from "../utils/apiResponse.js";
 import { asyncHandler, AppError } from "../middleware/errorHandler.js";
 import {
   updateOrderStatusSchema,
+  updateOrderPaymentStatusSchema,
   whatsappOrderAttemptSchema,
+  confirmWhatsAppOrderSchema,
 } from "../validators/orderSchemas.js";
 import type { AuthRequest } from "../middleware/authMiddleware.js";
 
-// @desc    Record WhatsApp order attempt
+// @desc    Record or reuse WhatsApp order attempt
 // @route   POST /api/orders/whatsapp-attempt
 // @access  Public / Optional Auth
 export const createWhatsAppOrderAttempt = asyncHandler(
   async (req: AuthRequest, res: Response) => {
     const validatedData = whatsappOrderAttemptSchema.parse(req.body);
-    const { items, promoCode } = validatedData;
+    const { items, promoCode, attemptId } = validatedData;
 
     const productIds = items.map((item) => item.productId);
     const products = await Product.find({
@@ -76,6 +79,41 @@ export const createWhatsAppOrderAttempt = asyncHandler(
     const deliveryFee = subtotal >= 999 || subtotal === 0 ? 0 : 49;
     const finalAmount = Math.max(0, subtotal - safeDiscount + deliveryFee);
 
+    // Reuse existing unconfirmed attempt if customer clicks again
+    if (attemptId) {
+      const isObjId = Types.ObjectId.isValid(attemptId);
+      const existingOrder = await Order.findOne({
+        $or: [
+          { orderId: attemptId },
+          ...(isObjId ? [{ _id: attemptId }] : []),
+        ],
+      });
+
+      if (existingOrder && existingOrder.orderStatus === "whatsapp_pending") {
+        existingOrder.products = orderProducts;
+        existingOrder.totalAmount = subtotal;
+        existingOrder.discount = safeDiscount;
+        existingOrder.finalAmount = finalAmount;
+        if (!existingOrder.userId && req.user?._id) {
+          existingOrder.userId = req.user._id;
+        }
+
+        await existingOrder.save();
+
+        sendSuccess(
+          res,
+          "WhatsApp order attempt updated successfully",
+          {
+            orderId: existingOrder.orderId,
+            finalAmount: existingOrder.finalAmount,
+            orderStatus: existingOrder.orderStatus,
+          },
+          200
+        );
+        return;
+      }
+    }
+
     const order = new Order({
       userId: req.user?._id || undefined,
       products: orderProducts,
@@ -106,6 +144,51 @@ export const createWhatsAppOrderAttempt = asyncHandler(
       },
       201
     );
+  }
+);
+
+// @desc    Confirm WhatsApp order attempt (promote to placed)
+// @route   POST /api/orders/confirm-whatsapp
+// @access  Public / Optional Auth
+export const confirmWhatsAppOrder = asyncHandler(
+  async (req: AuthRequest, res: Response) => {
+    const validatedData = confirmWhatsAppOrderSchema.parse(req.body);
+    const { orderId } = validatedData;
+
+    const isObjId = Types.ObjectId.isValid(orderId);
+    const order = await Order.findOne({
+      $or: [
+        { orderId },
+        ...(isObjId ? [{ _id: orderId }] : []),
+      ],
+    });
+
+    if (!order) {
+      throw new AppError("Order attempt not found", 404);
+    }
+
+    // Idempotent: If already placed, return success immediately
+    if (order.orderStatus === "placed") {
+      sendSuccess(res, "Order is already confirmed", order, 200);
+      return;
+    }
+
+    // If order has progressed past placed (confirmed, shipped, etc.)
+    if (order.orderStatus !== "whatsapp_pending") {
+      sendSuccess(res, `Order is already in ${order.orderStatus} status`, order, 200);
+      return;
+    }
+
+    // Promote draft attempt to placed order
+    order.orderStatus = "placed";
+    // Payment status remains pending (placed order does not mean paid)
+    if (!order.userId && req.user?._id) {
+      order.userId = req.user._id;
+    }
+
+    await order.save();
+
+    sendSuccess(res, "Order confirmed successfully", order, 200);
   }
 );
 
@@ -163,39 +246,90 @@ export const getOrderById = asyncHandler(
   }
 );
 
-// @desc    Update order status (Admin only)
+// @desc    Update order status and/or payment status (Admin only)
 // @route   PUT /api/orders/:id/status
 // @access  Admin
 export const updateOrderStatus = asyncHandler(
   async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
+    const idStr = typeof id === "string" ? id : String(id);
     const validatedData = updateOrderStatusSchema.parse(req.body);
-    const { status } = validatedData;
+    const { status, paymentStatus } = validatedData;
 
-    const order = await Order.findById(id);
+    const isObjId = Types.ObjectId.isValid(idStr);
+    const order = await Order.findOne({
+      $or: [
+        { orderId: idStr },
+        ...(isObjId ? [{ _id: idStr }] : []),
+      ],
+    });
 
     if (!order) {
       throw new AppError("Order not found", 404);
     }
 
-    const previousStatus = order.orderStatus;
-    order.orderStatus = status;
+    if (paymentStatus) {
+      order.paymentStatus = paymentStatus;
+    }
 
-    // Handle cancellation: return stock to store
-    if (status === "cancelled" && previousStatus !== "cancelled") {
-      for (const item of order.products) {
-        await Product.findByIdAndUpdate(item.productId, {
-          $inc: { stock: item.quantity },
-        });
-      }
-      if (order.paymentStatus === "paid") {
-        order.paymentStatus = "refunded"; // mark for refund tracking
+    if (status) {
+      const previousStatus = order.orderStatus;
+
+      // Idempotent: If already placed and updating to placed, avoid re-processing
+      if (status === "placed" && previousStatus === "placed") {
+        if (!paymentStatus) {
+          sendSuccess(res, "Order is already marked as placed", order);
+          return;
+        }
+      } else {
+        order.orderStatus = status;
+
+        // Handle cancellation: return stock to store
+        if (status === "cancelled" && previousStatus !== "cancelled") {
+          for (const item of order.products) {
+            await Product.findByIdAndUpdate(item.productId, {
+              $inc: { stock: item.quantity },
+            });
+          }
+          if (order.paymentStatus === "paid") {
+            order.paymentStatus = "refunded"; // mark for refund tracking
+          }
+        }
       }
     }
 
     // Handle confirmation or shipping adjustments if needed
     await order.save();
 
-    sendSuccess(res, `Order status updated to ${status}`, order);
+    sendSuccess(res, "Order updated successfully", order);
+  }
+);
+
+// @desc    Update order payment status (Admin only)
+// @route   PUT /api/orders/:id/payment-status
+// @access  Admin
+export const updateOrderPaymentStatus = asyncHandler(
+  async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const idStr = typeof id === "string" ? id : String(id);
+    const validatedData = updateOrderPaymentStatusSchema.parse(req.body);
+    const { paymentStatus } = validatedData;
+
+    const isObjId = Types.ObjectId.isValid(idStr);
+    const order = await Order.findOne({
+      $or: [
+        { orderId: idStr },
+        ...(isObjId ? [{ _id: idStr }] : []),
+      ],
+    });
+
+    if (!order) {
+      throw new AppError("Order not found", 404);
+    }
+
+    order.paymentStatus = paymentStatus;
+    await order.save();
+
+    sendSuccess(res, `Payment status updated to ${paymentStatus}`, order);
   }
 );

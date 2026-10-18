@@ -53,4 +53,12 @@ export const adminService = {
     const { data } = await api.put<ApiResponse<Order>>(`/orders/${orderId}/status`, { status });
     return data;
   },
+
+  /**
+   * Update an order's payment status (admin context)
+   */
+  async updateOrderPaymentStatus(orderId: string, paymentStatus: string): Promise<ApiResponse<Order>> {
+    const { data } = await api.put<ApiResponse<Order>>(`/orders/${orderId}/payment-status`, { paymentStatus });
+    return data;
+  },
 };

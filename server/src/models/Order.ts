@@ -1,7 +1,7 @@
 import mongoose, { Schema, type Document, type Model, Types } from "mongoose";
 
 export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
-export type PaymentMethod = "razorpay" | "cod" | "whatsapp";
+export type PaymentMethod = "razorpay" | "cod" | "whatsapp" | "upi";
 export type OrderStatus =
   | "whatsapp_pending"
   | "placed"
@@ -122,7 +122,7 @@ const orderSchema = new Schema<IOrder>(
     },
     paymentMethod: {
       type: String,
-      enum: ["razorpay", "cod", "whatsapp"],
+      enum: ["razorpay", "cod", "whatsapp", "upi"],
       required: true,
     },
     razorpayOrderId: { type: String },

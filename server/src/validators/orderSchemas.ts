@@ -26,19 +26,31 @@ export const verifyPaymentSchema = z.object({
   razorpaySignature: z.string().min(1, "Razorpay Signature is required"),
 });
 
-export const updateOrderStatusSchema = z.object({
-  status: z.enum([
-    "whatsapp_pending",
-    "placed",
-    "confirmed",
-    "processing",
-    "shipped",
-    "delivered",
-    "cancelled",
-  ]),
+export const updateOrderStatusSchema = z
+  .object({
+    status: z
+      .enum([
+        "whatsapp_pending",
+        "placed",
+        "confirmed",
+        "processing",
+        "shipped",
+        "delivered",
+        "cancelled",
+      ])
+      .optional(),
+    paymentStatus: z.enum(["pending", "paid", "failed", "refunded"]).optional(),
+  })
+  .refine((data) => data.status !== undefined || data.paymentStatus !== undefined, {
+    message: "Either status or paymentStatus must be provided",
+  });
+
+export const updateOrderPaymentStatusSchema = z.object({
+  paymentStatus: z.enum(["pending", "paid", "failed", "refunded"]),
 });
 
 export const whatsappOrderAttemptSchema = z.object({
+  attemptId: z.string().optional(),
   items: z
     .array(
       z.object({
@@ -50,7 +62,14 @@ export const whatsappOrderAttemptSchema = z.object({
   promoCode: z.string().optional(),
 });
 
+export const confirmWhatsAppOrderSchema = z.object({
+  orderId: z.string().min(1, "Order reference ID is required"),
+});
+
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type VerifyPaymentInput = z.infer<typeof verifyPaymentSchema>;
 export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
+export type UpdateOrderPaymentStatusInput = z.infer<typeof updateOrderPaymentStatusSchema>;
 export type WhatsAppOrderAttemptInput = z.infer<typeof whatsappOrderAttemptSchema>;
+export type ConfirmWhatsAppOrderInput = z.infer<typeof confirmWhatsAppOrderSchema>;
+

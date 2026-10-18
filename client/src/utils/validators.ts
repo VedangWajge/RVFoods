@@ -1,4 +1,4 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 import type { ProductCategory } from "@/types/product.types";
 
 const productCategories = [
@@ -74,7 +74,7 @@ export const shippingSchema = addressSchema;
 
 export const checkoutSchema = z.object({
   shippingAddress: addressSchema,
-  paymentMethod: z.enum(["razorpay", "cod"]),
+  paymentMethod: z.enum(["razorpay", "cod", "whatsapp", "upi"]),
 });
 
 export const reviewSchema = z.object({

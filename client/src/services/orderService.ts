@@ -21,6 +21,17 @@ export const orderService = {
   },
 
   /**
+   * Confirm WhatsApp order (customer placed order via WhatsApp)
+   */
+  async confirmWhatsAppOrder(orderId: string): Promise<ApiResponse<Order>> {
+    const { data } = await api.post<ApiResponse<Order>>(
+      "/orders/confirm-whatsapp",
+      { orderId }
+    );
+    return data;
+  },
+
+  /**
    * Get all orders of the logged-in user
    */
   async getMyOrders(): Promise<ApiResponse<Order[]>> {
