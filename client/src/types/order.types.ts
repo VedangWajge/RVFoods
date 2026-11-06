@@ -29,9 +29,14 @@ export interface Order {
   _id: string;
   orderId: string;
   userId?: string | { _id: string; name?: string; email?: string } | null;
+  customerName?: string;
   products: OrderProductItem[];
   totalAmount: number;
   discount: number;
+  deliveryCharge?: number;
+  deliveryChargeSource?: "calculated" | "free" | "fallback";
+  deliveryDistanceKm?: number;
+  deliveryLocation?: DeliveryLocation;
   finalAmount: number;
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod;
@@ -115,16 +120,58 @@ export interface OrderTimelineStep {
 export interface LogWhatsAppOrderItem {
   productId: string;
   quantity: number;
+  weight?: string;
 }
 
 export interface LogWhatsAppOrderPayload {
   items: LogWhatsAppOrderItem[];
   promoCode?: string;
   attemptId?: string;
+  customerName: string;
+  addressLine: string;
+  formattedAddress: string;
+  city?: string;
+  state?: string;
+  pincode: string;
+  location: DeliveryLocation;
+  expectedDeliveryCharge: number;
 }
 
 export interface LogWhatsAppOrderResponse {
   orderId: string;
+  deliveryCharge: number;
   finalAmount: number;
   orderStatus: OrderStatus;
+}
+
+export interface ConfirmWhatsAppOrderResponse {
+  orderId: string;
+  finalAmount: number;
+  orderStatus: OrderStatus;
+}
+
+export interface DeliveryLocation {
+  lat: number;
+  lng: number;
+}
+
+export interface SelectedDeliveryPlace extends DeliveryLocation {
+  formatted: string;
+  city?: string;
+  state?: string;
+}
+
+export interface DeliveryQuotePayload {
+  location: DeliveryLocation;
+  items: LogWhatsAppOrderItem[];
+  promoCode?: string;
+}
+
+export interface DeliveryQuote {
+  status: "calculated" | "free" | "fallback" | "out_of_range";
+  deliveryCharge: number | null;
+  distanceKm: number | null;
+  subtotal: number;
+  discount: number;
+  finalAmount: number | null;
 }

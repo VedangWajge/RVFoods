@@ -444,7 +444,7 @@ export default function ManageOrders() {
                                       </h4>
                                       <div className="text-text-secondary leading-relaxed bg-white border border-border p-3.5 rounded-xl">
                                         <p className="font-semibold text-text-primary">
-                                          {customer?.name || (order.orderStatus === "whatsapp_pending" || !order.userId ? "Guest Customer (WhatsApp)" : "Deleted User")}
+                                          {order.customerName || customer?.name || (order.orderStatus === "whatsapp_pending" || !order.userId ? "Guest Customer (WhatsApp)" : "Deleted User")}
                                         </p>
                                         <p>{order.shippingAddress.street}</p>
                                         <p>
@@ -454,6 +454,16 @@ export default function ManageOrders() {
                                         <p className="text-xs mt-1 text-text-muted">
                                           Country: {order.shippingAddress.country}
                                         </p>
+                                        {order.deliveryLocation && (
+                                          <a
+                                            href={`https://www.google.com/maps/search/?api=1&query=${order.deliveryLocation.lat},${order.deliveryLocation.lng}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-xs font-semibold text-primary hover:underline mt-1 inline-block"
+                                          >
+                                            Open pin in Google Maps
+                                          </a>
+                                        )}
                                       </div>
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
@@ -518,7 +528,7 @@ export default function ManageOrders() {
                                           >
                                             <div className="h-10 w-10 rounded-md border border-border overflow-hidden shrink-0">
                                               <img
-                                                src={item.image || "/placeholder-product.jpg"}
+                                                src={item.image || "/placeholder-product.svg"}
                                                 alt={item.name}
                                                 className="h-full w-full object-cover"
                                               />
@@ -552,6 +562,16 @@ export default function ManageOrders() {
                                             <div className="flex justify-between text-success">
                                               <span>Promo Discount:</span>
                                               <span>-{formatCurrency(order.discount)}</span>
+                                            </div>
+                                          )}
+                                          {order.deliveryCharge !== undefined && (
+                                            <div className="flex justify-between text-text-secondary">
+                                              <span>
+                                                Delivery
+                                                {order.deliveryDistanceKm !== undefined && ` (${order.deliveryDistanceKm} km)`}
+                                                {order.deliveryChargeSource === "fallback" && " (flat rate, maps API was down)"}:
+                                              </span>
+                                              <span>{order.deliveryCharge === 0 ? "FREE" : formatCurrency(order.deliveryCharge)}</span>
                                             </div>
                                           )}
                                           <div className="flex justify-between text-text-primary font-bold text-sm pt-1 border-t border-border/50">

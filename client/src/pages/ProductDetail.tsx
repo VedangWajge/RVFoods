@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { useProducts } from "@/hooks/useProducts";
 import { useCart } from "@/hooks/useCart";
@@ -11,6 +11,7 @@ import ProductCard from "@/components/product/ProductCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/utils/formatCurrency";
+import { findSize, getProductSizes } from "@/utils/productSizes";
 import {
   Star,
   Plus,
@@ -36,6 +37,7 @@ type DetailTab = "description" | "ingredients" | "benefits" | "reviews";
 
 export default function ProductDetail() {
   const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
   const { product, loading, error, fetchProductBySlug } = useProducts();
   const { products: relatedProducts, fetchProducts: fetchRelatedProducts } = useProducts();
   const { addProduct } = useCart();
@@ -45,6 +47,7 @@ export default function ProductDetail() {
   const { reviews, loading: reviewsLoading, fetchReviews, addReview, removeReview } = useReviews();
 
   const [quantity, setQuantity] = useState(1);
+  const [selectedWeight, setSelectedWeight] = useState<string | null>(null);
   const [selectedImgIndex, setSelectedImgIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<DetailTab>("description");
 
@@ -58,6 +61,7 @@ export default function ProductDetail() {
     if (slug) {
       fetchProductBySlug(slug);
       setQuantity(1);
+      setSelectedWeight(null);
       setSelectedImgIndex(0);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -132,9 +136,18 @@ export default function ProductDetail() {
     );
   }
 
-  const hasDiscount = product.discountPrice !== undefined && product.discountPrice < product.price;
-  const displayPrice = hasDiscount ? product.discountPrice! : product.price;
-  const isOutOfStock = product.stock <= 0;
+  const sizes = getProductSizes(product);
+  const size = findSize(sizes, selectedWeight);
+  const hasDiscount = size.discountPrice !== undefined && size.discountPrice < size.price;
+  const displayPrice = hasDiscount ? size.discountPrice! : size.price;
+  const isOutOfStock = size.stock <= 0;
+
+  const handleSelectSize = (weight: string) => {
+    setSelectedWeight(weight);
+    // The new size may have less stock than the quantity already chosen
+    const newSize = findSize(sizes, weight);
+    setQuantity((q) => Math.max(1, Math.min(q, newSize.stock)));
+  };
 
   // Filter out the current product from related items
   const filteredRelated = relatedProducts
@@ -143,16 +156,17 @@ export default function ProductDetail() {
 
   const handleAddToCart = () => {
     if (isOutOfStock) return;
-    addProduct(product, quantity);
-    showToast(`Added ${quantity} x ${product.name} to cart!`, "success");
+    addProduct(product, quantity, size.weight);
+    const label = sizes.length > 1 ? `${product.name} (${size.weight})` : product.name;
+    showToast(`Added ${quantity} x ${label} to cart!`, "success");
   };
 
   const handleBuyWhatsApp = () => {
     const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER || "919XXXXXXXXX";
 
     if (isOutOfStock) {
-      const productInfo = product.weight
-        ? `${product.name} (${product.weight})`
+      const productInfo = size.weight
+        ? `${product.name} (${size.weight})`
         : product.name;
       const message = `Hi! I'm interested in ${productInfo}. It is currently out of stock. Is it possible to arrange it for me?`;
       const encodedMessage = encodeURIComponent(message);
@@ -161,15 +175,9 @@ export default function ProductDetail() {
       return;
     }
 
-    const totalAmount = product.price * quantity;
-    const message = `Hi RV Foods! 🙏 I'd like to order:\n- ${product.name} x${quantity} — ₹${totalAmount}\nTotal: ₹${totalAmount}\n\nPlease share payment details.`;
-    const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
-    
-    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
-    
-    // Open UPI QR modal immediately so they can scan
-    useUIStore.getState().openUPIModal();
+    // Go through the cart so the order gets an address and a delivery charge
+    addProduct(product, quantity, size.weight);
+    navigate("/cart");
   };
 
   const categoryLabels: Record<string, string> = {
@@ -206,13 +214,13 @@ export default function ProductDetail() {
               {/* Main Image Frame */}
               <div className="relative aspect-square w-full overflow-hidden bg-background rounded-xl border border-border">
                 <img
-                  src={product.images?.[selectedImgIndex]?.url || "/placeholder-product.jpg"}
+                  src={product.images?.[selectedImgIndex]?.url || "/placeholder-product.svg"}
                   alt={product.name}
                   className="h-full w-full object-cover"
                 />
                 {hasDiscount && (
                   <span className="absolute top-4 left-4 bg-primary text-white text-xs font-bold px-2.5 py-1 rounded-md">
-                    {Math.round(((product.price - product.discountPrice!) / product.price) * 100)}% OFF
+                    {Math.round(((size.price - size.discountPrice!) / size.price) * 100)}% OFF
                   </span>
                 )}
                 {isOutOfStock && (
@@ -248,9 +256,9 @@ export default function ProductDetail() {
                   <Badge variant="secondary" className="bg-accent-light/30 text-primary border-none hover:bg-accent-light/30">
                     {categoryLabels[product.category] || product.category}
                   </Badge>
-                  {product.weight && (
+                  {sizes.length === 1 && size.weight && (
                     <span className="text-xs text-text-secondary ml-3 bg-background border border-border px-2.5 py-1 rounded-full font-semibold">
-                      {product.weight}
+                      {size.weight}
                     </span>
                   )}
                 </div>
@@ -284,6 +292,41 @@ export default function ProductDetail() {
                   </span>
                 </div>
 
+                {/* Size selector */}
+                {sizes.length > 1 && (
+                  <div className="mb-4" role="group" aria-label="Choose a size">
+                    <span className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">
+                      Size:
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {sizes.map((s) => {
+                        const isSelected = s.weight === size.weight;
+                        const isSizeOut = s.stock <= 0;
+                        return (
+                          <button
+                            key={s.weight}
+                            type="button"
+                            aria-pressed={isSelected}
+                            onClick={() => handleSelectSize(s.weight)}
+                            className={`min-w-[84px] rounded-lg border px-3 py-2 text-center transition-colors ${
+                              isSelected
+                                ? "border-primary bg-primary/10"
+                                : "border-border bg-white hover:bg-background"
+                            } ${isSizeOut ? "opacity-60" : ""}`}
+                          >
+                            <span className={`block text-sm font-semibold ${isSelected ? "text-primary" : "text-text-primary"}`}>
+                              {s.weight}
+                            </span>
+                            <span className="block text-xs text-text-secondary">
+                              {isSizeOut ? "Out of stock" : formatCurrency(s.discountPrice ?? s.price)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Price block */}
                 <div className="flex items-baseline gap-3 mb-6 p-4 bg-background rounded-xl border border-border">
                   <span className="text-3xl font-bold text-primary">
@@ -292,10 +335,10 @@ export default function ProductDetail() {
                   {hasDiscount && (
                     <>
                       <span className="text-lg text-text-muted line-through">
-                        {formatCurrency(product.price)}
+                        {formatCurrency(size.price)}
                       </span>
                       <Badge className="bg-success text-white border-none ml-2 text-xs font-semibold px-2 py-0.5">
-                        Save {formatCurrency(product.price - product.discountPrice!)}
+                        Save {formatCurrency(size.price - size.discountPrice!)}
                       </Badge>
                     </>
                   )}
@@ -311,10 +354,10 @@ export default function ProductDetail() {
                   <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary">Availability:</span>
                   {isOutOfStock ? (
                     <Badge className="bg-error text-white font-semibold text-xs px-2.5 py-0.5 border-none">Out of stock</Badge>
-                  ) : product.stock <= 5 ? (
-                    <Badge className="bg-accent text-text-primary font-semibold text-xs px-2.5 py-0.5 border-none">Only {product.stock} left in stock!</Badge>
+                  ) : size.stock <= 5 ? (
+                    <Badge className="bg-accent text-text-primary font-semibold text-xs px-2.5 py-0.5 border-none">Only a few left!</Badge>
                   ) : (
-                    <Badge className="bg-success/20 text-success border border-success/30 font-semibold text-xs px-2.5 py-0.5">In Stock ({product.stock} units)</Badge>
+                    <Badge className="bg-success/20 text-success border border-success/30 font-semibold text-xs px-2.5 py-0.5">In Stock</Badge>
                   )}
                 </div>
               </div>
@@ -333,7 +376,7 @@ export default function ProductDetail() {
                       </button>
                       <span className="w-12 text-center text-sm font-semibold text-text-primary">{quantity}</span>
                       <button
-                        onClick={() => setQuantity((q) => Math.min(product.stock, q + 1))}
+                        onClick={() => setQuantity((q) => Math.min(size.stock, q + 1))}
                         className="px-3 h-full hover:bg-border transition-colors text-text-secondary rounded-r-lg"
                       >
                         <Plus className="w-3.5 h-3.5" />

@@ -35,13 +35,16 @@ export function useCart() {
 
   const isEmpty = items.length === 0;
 
-  const addProduct = (product: Product, quantity = 1) => {
-    addFromProduct(product, quantity);
-    showToast(`Added ${product.name} to cart!`, "success");
+  const addProduct = (product: Product, quantity = 1, weight?: string) => {
+    addFromProduct(product, quantity, weight);
+    const label = product.variants?.length && weight ? `${product.name} (${weight})` : product.name;
+    showToast(`Added ${label} to cart!`, "success");
   };
 
   const getProductQuantity = (productId: string): number =>
-    getItem(productId)?.quantity ?? 0;
+    items
+      .filter((item) => item.productId === productId)
+      .reduce((total, item) => total + item.quantity, 0);
 
   return {
     items,

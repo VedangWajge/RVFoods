@@ -3,6 +3,7 @@ import { ShoppingBag, ArrowRight, X } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { useUIStore } from "@/store/uiStore";
 import { formatCurrency } from "@/utils/formatCurrency";
+import { getCartLineId } from "@/utils/cartHelpers";
 import CartItem from "./CartItem";
 import {
   Sheet,
@@ -67,7 +68,7 @@ export default function CartDrawer() {
               </Button>
             </div>
           ) : (
-            items.map((item) => <CartItem key={item.productId} item={item} />)
+            items.map((item) => <CartItem key={getCartLineId(item)} item={item} />)
           )}
         </div>
 
@@ -87,12 +88,10 @@ export default function CartDrawer() {
               )}
               <div className="flex justify-between text-xs text-text-secondary font-medium">
                 <span>Delivery</span>
-                <span className={summary.deliveryFee === 0 ? "text-success font-semibold" : ""}>
-                  {summary.deliveryFee === 0 ? "FREE" : formatCurrency(summary.deliveryFee)}
-                </span>
+                <span>Calculated in cart</span>
               </div>
               <div className="flex justify-between text-base font-bold text-text-primary pt-2 border-t border-border/60">
-                <span>Total Amount</span>
+                <span>Total (excl. delivery)</span>
                 <span className="text-primary">{formatCurrency(summary.total)}</span>
               </div>
             </div>

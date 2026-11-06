@@ -7,7 +7,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { BRAND } from "@/utils/constants";
+import BrandLogo from "@/components/common/BrandLogo";
 import { cn } from "@/lib/utils";
 
 const ADMIN_LINKS = [
@@ -29,9 +29,9 @@ export default function AdminSidebar({ className, onLinkClick }: AdminSidebarPro
         <Link
           to="/admin"
           onClick={onLinkClick}
-          className="font-heading text-xl font-bold text-primary"
+          className="inline-flex"
         >
-          {BRAND.name}
+          <BrandLogo className="h-16 w-16" />
         </Link>
         <p className="mt-1 text-xs text-text-muted">Admin Panel</p>
       </div>

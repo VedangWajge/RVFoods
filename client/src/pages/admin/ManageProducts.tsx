@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { Helmet } from "react-helmet-async";
 import { motion, AnimatePresence } from "framer-motion";
-import { useForm } from "react-hook-form";
+import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useProducts } from "@/hooks/useProducts";
 import { useUIStore } from "@/store/uiStore";
 import { createProductSchema } from "@/utils/validators";
 import { formatCurrency } from "@/utils/formatCurrency";
+import { getProductSizes } from "@/utils/productSizes";
 import Loader from "@/components/common/Loader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,18 @@ const CATEGORIES: { value: ProductCategory; label: string }[] = [
   { value: "snacks", label: "Snacks" },
   { value: "combo", label: "Combo Packs" },
 ];
+
+// The table searches and filters in the browser, so it needs every product loaded.
+const ADMIN_PRODUCT_LIMIT = 500;
+const ADMIN_PRODUCT_QUERY = { limit: ADMIN_PRODUCT_LIMIT, includeHidden: true };
+
+const EMPTY_SIZE = { weight: "", price: "", discountPrice: "", stock: 0 };
+
+const getProductCategories = (product: Product): ProductCategory[] =>
+  product.categories?.length ? product.categories : [product.category];
+
+const getCategoryLabel = (category: ProductCategory): string =>
+  CATEGORIES.find((cat) => cat.value === category)?.label ?? category;
 
 export default function ManageProducts() {
   const {
@@ -63,18 +76,16 @@ export default function ManageProducts() {
     handleSubmit,
     reset,
     setValue,
+    control,
     formState: { errors },
   } = useForm<any>({
     resolver: zodResolver(createProductSchema) as any,
     defaultValues: {
       name: "",
-      category: "spices",
+      categories: [],
       description: "",
       shortDescription: "",
-      price: 0,
-      discountPrice: undefined,
-      stock: 0,
-      weight: "",
+      sizes: [EMPTY_SIZE],
       ingredients: [],
       benefits: [],
       isFeatured: false,
@@ -82,9 +93,15 @@ export default function ManageProducts() {
     },
   });
 
+  const {
+    fields: sizeFields,
+    append: appendSize,
+    remove: removeSize,
+  } = useFieldArray({ control, name: "sizes" });
+
   // Fetch all products on mount
   useEffect(() => {
-    fetchProducts();
+    fetchProducts(ADMIN_PRODUCT_QUERY);
   }, [fetchProducts]);
 
   // Open modal for adding product
@@ -92,13 +109,10 @@ export default function ManageProducts() {
     setEditingProduct(null);
     reset({
       name: "",
-      category: "spices",
+      categories: [],
       description: "",
       shortDescription: "",
-      price: 0,
-      discountPrice: undefined,
-      stock: 0,
-      weight: "",
+      sizes: [EMPTY_SIZE],
       ingredients: [],
       benefits: [],
       isFeatured: false,
@@ -112,13 +126,15 @@ export default function ManageProducts() {
     setEditingProduct(product);
     reset({
       name: product.name,
-      category: product.category,
+      categories: getProductCategories(product),
       description: product.description,
       shortDescription: product.shortDescription || "",
-      price: product.price,
-      discountPrice: product.discountPrice || undefined,
-      stock: product.stock,
-      weight: product.weight,
+      sizes: getProductSizes(product).map((size) => ({
+        weight: size.weight,
+        price: size.price,
+        discountPrice: size.discountPrice ?? "",
+        stock: size.stock,
+      })),
       ingredients: product.ingredients || [],
       benefits: product.benefits || [],
       isFeatured: product.isFeatured || false,
@@ -151,12 +167,29 @@ export default function ManageProducts() {
 
   // Form Submit Action
   const onSubmit = async (values: any) => {
+    // One row is a plain product. Several rows become sizes for customers to choose from.
+    const { sizes, ...fields } = values;
+    const sizeDetails =
+      sizes.length === 1
+        ? {
+            weight: sizes[0].weight,
+            price: sizes[0].price,
+            // null clears a discount that was left blank
+            discountPrice: sizes[0].discountPrice ?? null,
+            stock: sizes[0].stock,
+            variants: [],
+          }
+        : { variants: sizes };
+
     // Sanitize payload (empty values, lists conversion)
     const payload = {
-      ...values,
-      discountPrice: values.discountPrice ? Number(values.discountPrice) : undefined,
-      price: Number(values.price),
-      stock: Number(values.stock),
+      ...fields,
+      ...sizeDetails,
+      // Keep the current main category if it's still ticked, so its badge doesn't change.
+      category:
+        editingProduct && values.categories.includes(editingProduct.category)
+          ? editingProduct.category
+          : values.categories[0],
       ingredients: Array.isArray(values.ingredients)
         ? values.ingredients
         : typeof values.ingredients === "string"
@@ -182,6 +215,7 @@ export default function ManageProducts() {
       if (created) {
         showToast("Product created successfully! You can now edit it to upload images.", "success");
         setIsModalOpen(false);
+        void fetchProducts(ADMIN_PRODUCT_QUERY);
       } else {
         showToast("Failed to create product", "error");
       }
@@ -223,7 +257,9 @@ export default function ManageProducts() {
   const filteredProducts = products.filter((p) => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (p.shortDescription && p.shortDescription.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesCategory = categoryFilter === "" || p.category === categoryFilter;
+    const matchesCategory =
+      categoryFilter === "" ||
+      getProductCategories(p).includes(categoryFilter as ProductCategory);
     return matchesSearch && matchesCategory;
   });
 
@@ -312,7 +348,7 @@ export default function ManageProducts() {
                       <td className="px-6 py-4">
                         <div className="h-12 w-12 rounded-lg border border-border bg-background overflow-hidden shrink-0">
                           <img
-                            src={prod.images?.[0]?.url || "/placeholder-product.jpg"}
+                            src={prod.images?.[0]?.url || "/placeholder-product.svg"}
                             alt={prod.name}
                             className="h-full w-full object-cover"
                           />
@@ -321,15 +357,18 @@ export default function ManageProducts() {
                       <td className="px-6 py-4">
                         <div className="max-w-[200px] truncate">
                           <h4 className="font-semibold text-text-primary truncate">{prod.name}</h4>
-                          <span className="text-[10px] text-text-muted">{prod.weight}</span>
+                          <span className="text-[10px] text-text-muted">
+                            {getProductSizes(prod).map((size) => size.weight).join(", ")}
+                          </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 capitalize text-text-secondary font-medium">
-                        {prod.category}
+                      <td className="px-6 py-4 text-text-secondary font-medium">
+                        {getProductCategories(prod).map(getCategoryLabel).join(", ")}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className="font-bold text-text-primary">
+                            {(prod.variants?.length ?? 0) > 1 && "From "}
                             {formatCurrency(prod.discountPrice ?? prod.price)}
                           </span>
                           {prod.discountPrice && (
@@ -447,52 +486,88 @@ export default function ManageProducts() {
                         {errors.name && <p className="text-xs text-error mt-1">{errors.name.message?.toString()}</p>}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="category">Category</Label>
-                          <select
-                            id="category"
-                            {...register("category")}
-                            className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                          >
-                            {CATEGORIES.map((cat) => (
-                              <option key={cat.value} value={cat.value}>
-                                {cat.label}
-                              </option>
-                            ))}
-                          </select>
-                          {errors.category && <p className="text-xs text-error mt-1">{errors.category.message?.toString()}</p>}
+                      <fieldset>
+                        <legend className="text-sm font-medium leading-none">Categories</legend>
+                        <p className="text-xs text-text-muted mt-1 mb-2">
+                          Tick every category this product should appear under.
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {CATEGORIES.map((cat) => (
+                            <label
+                              key={cat.value}
+                              className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-text-primary cursor-pointer hover:bg-background/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                            >
+                              <input
+                                type="checkbox"
+                                value={cat.value}
+                                {...register("categories")}
+                                className="h-4 w-4 accent-primary"
+                              />
+                              {cat.label}
+                            </label>
+                          ))}
                         </div>
+                        {errors.categories && <p className="text-xs text-error mt-1">{errors.categories.message?.toString()}</p>}
+                      </fieldset>
 
-                        <div>
-                          <Label htmlFor="weight">Weight / Volume</Label>
-                          <Input id="weight" {...register("weight")} placeholder="e.g. 500g, 1 Liter" />
-                          {errors.weight && <p className="text-xs text-error mt-1">{errors.weight.message?.toString()}</p>}
+                      <fieldset>
+                        <legend className="text-sm font-medium leading-none">Sizes & Prices</legend>
+                        <p className="text-xs text-text-muted mt-1 mb-2">
+                          Add a row for each size. With more than one, customers choose a size and the price changes.
+                        </p>
+                        <div className="space-y-3">
+                          {sizeFields.map((field, index) => {
+                            const rowErrors = (errors.sizes as any)?.[index];
+                            return (
+                              <div key={field.id} className="rounded-lg border border-border p-3" data-size-row>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                  <div>
+                                    <Label className="text-xs">Size</Label>
+                                    <Input placeholder="e.g. 250g" {...register(`sizes.${index}.weight`)} />
+                                    {rowErrors?.weight && <p className="text-xs text-error mt-1">{rowErrors.weight.message}</p>}
+                                  </div>
+                                  <div>
+                                    <Label className="text-xs">Price (₹)</Label>
+                                    <Input type="number" {...register(`sizes.${index}.price`)} />
+                                    {rowErrors?.price && <p className="text-xs text-error mt-1">{rowErrors.price.message}</p>}
+                                  </div>
+                                  <div>
+                                    <Label className="text-xs">Discount (₹)</Label>
+                                    <Input type="number" placeholder="Optional" {...register(`sizes.${index}.discountPrice`)} />
+                                    {rowErrors?.discountPrice && <p className="text-xs text-error mt-1">{rowErrors.discountPrice.message}</p>}
+                                  </div>
+                                  <div>
+                                    <Label className="text-xs">Stock</Label>
+                                    <Input type="number" {...register(`sizes.${index}.stock`)} />
+                                    {rowErrors?.stock && <p className="text-xs text-error mt-1">{rowErrors.stock.message}</p>}
+                                  </div>
+                                </div>
+                                {sizeFields.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeSize(index)}
+                                    className="mt-2 text-xs font-medium text-text-secondary hover:text-error"
+                                  >
+                                    Remove this size
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-4">
-                        <div>
-                          <Label htmlFor="price">Price (₹)</Label>
-                          <Input id="price" type="number" {...register("price")} />
-                          {errors.price && <p className="text-xs text-error mt-1">{errors.price.message?.toString()}</p>}
-                        </div>
-
-                        <div>
-                          <Label htmlFor="discountPrice">Discount Price (₹)</Label>
-                          <Input id="discountPrice" type="number" placeholder="Optional" {...register("discountPrice")} />
-                          {errors.discountPrice && <p className="text-xs text-error mt-1">{errors.discountPrice.message?.toString()}</p>}
-                        </div>
-
-                        <div>
-                          <Label htmlFor="stock">Stock Quantity</Label>
-                          <Input id="stock" type="number" {...register("stock")} />
-                          {errors.stock && <p className="text-xs text-error mt-1">{errors.stock.message?.toString()}</p>}
-                        </div>
-                      </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => appendSize(EMPTY_SIZE)}
+                          className="mt-3 gap-1 border-border"
+                        >
+                          <Plus className="h-4 w-4" /> Add another size
+                        </Button>
+                      </fieldset>
 
                       <div>
-                        <Label htmlFor="shortDescription">Short Description</Label>
+                        <Label htmlFor="shortDescription">Short Description (optional)</Label>
                         <Input
                           id="shortDescription"
                           {...register("shortDescription")}
@@ -502,7 +577,7 @@ export default function ManageProducts() {
                       </div>
 
                       <div>
-                        <Label htmlFor="description">Full Description</Label>
+                        <Label htmlFor="description">Full Description (optional)</Label>
                         <textarea
                           id="description"
                           rows={4}

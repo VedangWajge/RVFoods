@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import type { CartLineItem, Product } from "@/types/product.types";
 import {
   calculateCartSummary,
+  getCartLineId,
   productToCartItem,
   type CartSummary,
 } from "@/utils/cartHelpers";
@@ -14,15 +15,15 @@ interface CartState {
   getItemCount: () => number;
   getSubtotal: () => number;
   getSummary: () => CartSummary;
-  getItem: (productId: string) => CartLineItem | undefined;
+  getItem: (lineId: string) => CartLineItem | undefined;
   isInCart: (productId: string) => boolean;
 
   addItem: (item: CartLineItem) => void;
-  addFromProduct: (product: Product, quantity?: number) => void;
-  removeItem: (productId: string) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
-  incrementItem: (productId: string) => void;
-  decrementItem: (productId: string) => void;
+  addFromProduct: (product: Product, quantity?: number, weight?: string) => void;
+  removeItem: (lineId: string) => void;
+  updateQuantity: (lineId: string, quantity: number) => void;
+  incrementItem: (lineId: string) => void;
+  decrementItem: (lineId: string) => void;
   applyPromoCode: (code: string) => boolean;
   clearPromoCode: () => void;
   clearCart: () => void;
@@ -45,17 +46,16 @@ export const useCartStore = create<CartState>()(
       getSummary: () =>
         calculateCartSummary(get().items, get().promoDiscount),
 
-      getItem: (productId) =>
-        get().items.find((i) => i.productId === productId),
+      getItem: (lineId) =>
+        get().items.find((i) => getCartLineId(i) === lineId),
 
       isInCart: (productId) =>
         get().items.some((i) => i.productId === productId),
 
       addItem: (item) => {
         set((state) => {
-          const existing = state.items.find(
-            (i) => i.productId === item.productId
-          );
+          const lineId = getCartLineId(item);
+          const existing = state.items.find((i) => getCartLineId(i) === lineId);
           const newQty = clampQuantity(
             (existing?.quantity ?? 0) + item.quantity,
             item.stock
@@ -64,7 +64,7 @@ export const useCartStore = create<CartState>()(
           if (existing) {
             return {
               items: state.items.map((i) =>
-                i.productId === item.productId
+                getCartLineId(i) === lineId
                   ? { ...i, quantity: newQty, price: item.price, stock: item.stock }
                   : i
               ),
@@ -80,60 +80,48 @@ export const useCartStore = create<CartState>()(
         });
       },
 
-      addFromProduct: (product, quantity = 1) => {
-        if (product.stock <= 0) return;
-
-        const item = productToCartItem(
-          {
-            _id: product._id,
-            slug: product.slug,
-            name: product.name,
-            images: product.images,
-            price: product.price,
-            discountPrice: product.discountPrice,
-            stock: product.stock,
-          },
-          quantity
-        );
+      addFromProduct: (product, quantity = 1, weight) => {
+        const item = productToCartItem(product, quantity, weight);
+        if (item.stock <= 0) return;
 
         get().addItem(item);
       },
 
-      removeItem: (productId) =>
+      removeItem: (lineId) =>
         set((state) => ({
-          items: state.items.filter((i) => i.productId !== productId),
+          items: state.items.filter((i) => getCartLineId(i) !== lineId),
         })),
 
-      updateQuantity: (productId, quantity) =>
+      updateQuantity: (lineId, quantity) =>
         set((state) => {
-          const target = state.items.find((i) => i.productId === productId);
+          const target = state.items.find((i) => getCartLineId(i) === lineId);
           if (!target) return state;
 
           if (quantity <= 0) {
             return {
-              items: state.items.filter((i) => i.productId !== productId),
+              items: state.items.filter((i) => getCartLineId(i) !== lineId),
             };
           }
 
           return {
             items: state.items.map((i) =>
-              i.productId === productId
+              getCartLineId(i) === lineId
                 ? { ...i, quantity: clampQuantity(quantity, i.stock) }
                 : i
             ),
           };
         }),
 
-      incrementItem: (productId) => {
-        const item = get().getItem(productId);
+      incrementItem: (lineId) => {
+        const item = get().getItem(lineId);
         if (!item) return;
-        get().updateQuantity(productId, item.quantity + 1);
+        get().updateQuantity(lineId, item.quantity + 1);
       },
 
-      decrementItem: (productId) => {
-        const item = get().getItem(productId);
+      decrementItem: (lineId) => {
+        const item = get().getItem(lineId);
         if (!item) return;
-        get().updateQuantity(productId, item.quantity - 1);
+        get().updateQuantity(lineId, item.quantity - 1);
       },
 
       applyPromoCode: (code) => {

@@ -19,16 +19,29 @@ export interface ProductRatings {
   count: number;
 }
 
+/** One size of a product, such as "250g" or "1 piece" */
+export interface ProductVariant {
+  weight: string;
+  price: number;
+  discountPrice?: number;
+  stock: number;
+}
+
 export interface Product {
   _id: string;
   name: string;
   slug: string;
+  /** Main category: the one shown on product badges */
   category: ProductCategory;
+  /** Every category it's listed under. Older products may not have this. */
+  categories?: ProductCategory[];
   description: string;
   shortDescription: string;
   price: number;
   discountPrice?: number;
   stock: number;
+  /** Sizes customers choose from. Empty or missing if it's sold in one size only. */
+  variants?: ProductVariant[];
   images: ProductImage[];
   ingredients: string[];
   benefits: string[];
@@ -63,6 +76,8 @@ export interface ProductFilters extends ListQueryParams {
   minRating?: number;
   isFeatured?: boolean;
   sort?: ProductSortOption;
+  /** Admin only: also list hidden products */
+  includeHidden?: boolean;
 }
 
 export type ProductSortOption =
@@ -75,14 +90,17 @@ export type ProductSortOption =
 export interface CreateProductPayload {
   name: string;
   category: ProductCategory;
-  description: string;
-  shortDescription: string;
-  price: number;
-  discountPrice?: number;
-  stock: number;
+  categories: ProductCategory[];
+  description?: string;
+  shortDescription?: string;
+  price?: number;
+  /** null removes an existing discount */
+  discountPrice?: number | null;
+  stock?: number;
+  variants?: ProductVariant[];
   ingredients?: string[];
   benefits?: string[];
-  weight: string;
+  weight?: string;
   isFeatured?: boolean;
   isActive?: boolean;
 }
@@ -124,4 +142,6 @@ export interface CartLineItem {
   price: number;
   quantity: number;
   stock: number;
+  /** The size chosen, for products sold in several sizes */
+  weight?: string;
 }

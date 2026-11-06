@@ -27,12 +27,19 @@ export interface IShippingAddress {
   country: string;
 }
 
+export type DeliveryChargeSource = "calculated" | "free" | "fallback";
+
 export interface IOrder extends Document {
   orderId: string;
   userId?: Types.ObjectId;
+  customerName?: string;
   products: IOrderProductItem[];
   totalAmount: number;
   discount: number;
+  deliveryCharge: number;
+  deliveryChargeSource?: DeliveryChargeSource;
+  deliveryDistanceKm?: number;
+  deliveryLocation?: { lat: number; lng: number };
   finalAmount: number;
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod;
@@ -110,6 +117,20 @@ const orderSchema = new Schema<IOrder>(
       default: 0,
       min: 0,
     },
+    deliveryCharge: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    deliveryChargeSource: {
+      type: String,
+      enum: ["calculated", "free", "fallback"],
+    },
+    deliveryDistanceKm: { type: Number, min: 0 },
+    deliveryLocation: {
+      type: new Schema({ lat: Number, lng: Number }, { _id: false }),
+    },
+    customerName: { type: String, trim: true },
     finalAmount: {
       type: Number,
       required: true,

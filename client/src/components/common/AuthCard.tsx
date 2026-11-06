@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { BRAND } from "@/utils/constants";
+import BrandLogo from "@/components/common/BrandLogo";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 interface AuthCardProps {
@@ -20,11 +20,8 @@ export default function AuthCard({
     <div className="section-padding container-main flex min-h-[70vh] items-center justify-center">
       <Card className="w-full max-w-md border-border shadow-card">
         <CardHeader className="space-y-2 text-center">
-          <Link
-            to="/"
-            className="font-heading text-2xl font-bold text-primary"
-          >
-            {BRAND.name}
+          <Link to="/" className="mx-auto inline-flex">
+            <BrandLogo className="h-24 w-24" />
           </Link>
           <h1 className="font-heading text-xl font-semibold text-text-primary">
             {title}

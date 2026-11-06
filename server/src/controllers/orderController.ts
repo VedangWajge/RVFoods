@@ -1,8 +1,11 @@
 import type { Response } from "express";
 import { Types } from "mongoose";
-import { Order } from "../models/Order.js";
+import { Order, type DeliveryChargeSource, type IOrder } from "../models/Order.js";
 import { Product } from "../models/Product.js";
 import { sendSuccess } from "../utils/apiResponse.js";
+import { getRoadDistanceKm } from "../utils/deliveryDistance.js";
+import { buildDeliveryQuote } from "../utils/deliveryPricing.js";
+import { priceOrderItems } from "../utils/orderPricing.js";
 import { asyncHandler, AppError } from "../middleware/errorHandler.js";
 import {
   updateOrderStatusSchema,
@@ -12,72 +15,69 @@ import {
 } from "../validators/orderSchemas.js";
 import type { AuthRequest } from "../middleware/authMiddleware.js";
 
+// The confirm route is public, so it only returns what the cart needs.
+const toOrderReceipt = (order: IOrder) => ({
+  orderId: order.orderId,
+  finalAmount: order.finalAmount,
+  orderStatus: order.orderStatus,
+});
+
 // @desc    Record or reuse WhatsApp order attempt
 // @route   POST /api/orders/whatsapp-attempt
 // @access  Public / Optional Auth
 export const createWhatsAppOrderAttempt = asyncHandler(
   async (req: AuthRequest, res: Response) => {
     const validatedData = whatsappOrderAttemptSchema.parse(req.body);
-    const { items, promoCode, attemptId } = validatedData;
+    const {
+      items,
+      promoCode,
+      attemptId,
+      customerName,
+      addressLine,
+      formattedAddress,
+      city,
+      state,
+      pincode,
+      location,
+      expectedDeliveryCharge,
+    } = validatedData;
 
-    const productIds = items.map((item) => item.productId);
-    const products = await Product.find({
-      _id: { $in: productIds },
-      isActive: true,
-    });
+    const { orderProducts, subtotal, discount: safeDiscount } =
+      await priceOrderItems(items, promoCode);
 
-    const productMap = new Map<string, (typeof products)[0]>();
-    for (const prod of products) {
-      productMap.set(prod._id.toString(), prod);
+    // Recalculate here: the browser only ever sends what it was shown.
+    const quote = buildDeliveryQuote(await getRoadDistanceKm(location), subtotal);
+
+    if (quote.deliveryCharge === null) {
+      throw new AppError(
+        "Delivery is not available to this address online. Please message us on WhatsApp for a quote.",
+        422
+      );
     }
 
-    const orderProducts = [];
-    let subtotal = 0;
-
-    for (const item of items) {
-      const product = productMap.get(item.productId);
-      if (!product) {
-        throw new AppError(
-          `Product with ID ${item.productId} is unavailable or inactive`,
-          400
-        );
-      }
-
-      if (item.quantity <= 0) {
-        throw new AppError(`Invalid quantity for product ${product.name}`, 400);
-      }
-
-      // Trust only the server-side price from MongoDB
-      const unitPrice =
-        typeof product.discountPrice === "number" && product.discountPrice > 0
-          ? product.discountPrice
-          : product.price;
-
-      const itemTotal = unitPrice * item.quantity;
-      subtotal += itemTotal;
-
-      orderProducts.push({
-        productId: product._id,
-        name: product.name,
-        image: product.images?.[0]?.url ?? "",
-        price: unitPrice,
-        quantity: item.quantity,
-      });
+    if (quote.deliveryCharge !== expectedDeliveryCharge) {
+      throw new AppError(
+        `The approx. delivery charge is now ₹${quote.deliveryCharge}. Please review your total and try again.`,
+        409
+      );
     }
 
-    // Server-side promo calculation
-    let discount = 0;
-    if (promoCode) {
-      const normalizedPromo = promoCode.trim().toUpperCase();
-      if (normalizedPromo === "RVFOODS10") {
-        discount = Math.round(subtotal * 0.1);
-      }
-    }
-
-    const safeDiscount = Math.min(discount, subtotal);
-    // Standard delivery fee convention: ₹49 if subtotal < ₹999, free for ₹999+
-    const deliveryFee = subtotal >= 999 || subtotal === 0 ? 0 : 49;
-    const finalAmount = Math.max(0, subtotal - safeDiscount + deliveryFee);
+    const deliveryCharge = quote.deliveryCharge;
+    const finalAmount = Math.max(0, subtotal - safeDiscount + deliveryCharge);
+    const deliveryDetails = {
+      customerName,
+      deliveryCharge,
+      deliveryChargeSource: quote.status as DeliveryChargeSource,
+      deliveryDistanceKm: quote.distanceKm ?? undefined,
+      deliveryLocation: location,
+      shippingAddress: {
+        street: `${addressLine}, ${formattedAddress}`,
+        city: city || "Mumbai",
+        state: state || "Maharashtra",
+        pincode,
+        country: "India",
+      },
+    };
 
     // Reuse existing unconfirmed attempt if customer clicks again
     if (attemptId) {
@@ -94,6 +94,7 @@ export const createWhatsAppOrderAttempt = asyncHandler(
         existingOrder.totalAmount = subtotal;
         existingOrder.discount = safeDiscount;
         existingOrder.finalAmount = finalAmount;
+        existingOrder.set(deliveryDetails);
         if (!existingOrder.userId && req.user?._id) {
           existingOrder.userId = req.user._id;
         }
@@ -105,6 +106,7 @@ export const createWhatsAppOrderAttempt = asyncHandler(
           "WhatsApp order attempt updated successfully",
           {
             orderId: existingOrder.orderId,
+            deliveryCharge,
             finalAmount: existingOrder.finalAmount,
             orderStatus: existingOrder.orderStatus,
           },
@@ -120,16 +122,10 @@ export const createWhatsAppOrderAttempt = asyncHandler(
       totalAmount: subtotal,
       discount: safeDiscount,
       finalAmount,
+      ...deliveryDetails,
       paymentStatus: "pending",
       paymentMethod: "whatsapp",
       orderStatus: "whatsapp_pending",
-      shippingAddress: {
-        street: "Pending confirmation via WhatsApp",
-        city: "WhatsApp Order",
-        state: "Pending",
-        pincode: "000000",
-        country: "India",
-      },
     });
 
     await order.save();
@@ -139,6 +135,7 @@ export const createWhatsAppOrderAttempt = asyncHandler(
       "WhatsApp order attempt recorded successfully",
       {
         orderId: order.orderId,
+        deliveryCharge,
         finalAmount: order.finalAmount,
         orderStatus: order.orderStatus,
       },
@@ -169,13 +166,13 @@ export const confirmWhatsAppOrder = asyncHandler(
 
     // Idempotent: If already placed, return success immediately
     if (order.orderStatus === "placed") {
-      sendSuccess(res, "Order is already confirmed", order, 200);
+      sendSuccess(res, "Order is already confirmed", toOrderReceipt(order), 200);
       return;
     }
 
     // If order has progressed past placed (confirmed, shipped, etc.)
     if (order.orderStatus !== "whatsapp_pending") {
-      sendSuccess(res, `Order is already in ${order.orderStatus} status`, order, 200);
+      sendSuccess(res, `Order is already in ${order.orderStatus} status`, toOrderReceipt(order), 200);
       return;
     }
 
@@ -188,7 +185,7 @@ export const confirmWhatsAppOrder = asyncHandler(
 
     await order.save();
 
-    sendSuccess(res, "Order confirmed successfully", order, 200);
+    sendSuccess(res, "Order confirmed successfully", toOrderReceipt(order), 200);
   }
 );
 
@@ -284,12 +281,14 @@ export const updateOrderStatus = asyncHandler(
       } else {
         order.orderStatus = status;
 
-        // Handle cancellation: return stock to store
         if (status === "cancelled" && previousStatus !== "cancelled") {
-          for (const item of order.products) {
-            await Product.findByIdAndUpdate(item.productId, {
-              $inc: { stock: item.quantity },
-            });
+          // WhatsApp orders never reduce stock, so cancelling must not add any back.
+          if (order.paymentMethod !== "whatsapp") {
+            for (const item of order.products) {
+              await Product.findByIdAndUpdate(item.productId, {
+                $inc: { stock: item.quantity },
+              });
+            }
           }
           if (order.paymentStatus === "paid") {
             order.paymentStatus = "refunded"; // mark for refund tracking

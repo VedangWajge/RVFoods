@@ -9,14 +9,14 @@ import {
   deleteProductImage,
   toggleFeatured,
 } from "../controllers/productController.js";
-import { protect } from "../middleware/authMiddleware.js";
+import { protect, optionalAuth } from "../middleware/authMiddleware.js";
 import { adminOnly } from "../middleware/adminMiddleware.js";
 import { upload, handleUploadError } from "../middleware/uploadMiddleware.js";
 
 const router = Router();
 
 // Public routes
-router.get("/", getProducts);
+router.get("/", optionalAuth, getProducts);
 router.get("/:slug", getProductBySlug);
 
 // Admin routes - protected

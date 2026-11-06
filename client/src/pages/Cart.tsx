@@ -4,7 +4,16 @@ import { Helmet } from "react-helmet-async";
 import { useCart } from "@/hooks/useCart";
 import { useUIStore } from "@/store/uiStore";
 import { orderService } from "@/services/orderService";
+import { deliveryService } from "@/services/deliveryService";
+import { getErrorMessage } from "@/services/api";
 import { formatCurrency } from "@/utils/formatCurrency";
+import { getCartItemLabel, getCartLineId } from "@/utils/cartHelpers";
+import DeliveryAddressForm from "@/components/cart/DeliveryAddressForm";
+import type {
+  DeliveryLocation,
+  DeliveryQuote,
+  SelectedDeliveryPlace,
+} from "@/types/order.types";
 import {
   Trash2,
   Plus,
@@ -32,6 +41,9 @@ const WhatsAppIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
 );
 
 
+const mapLink = ({ lat, lng }: DeliveryLocation) =>
+  `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+
 export default function Cart() {
   const {
     items,
@@ -50,6 +62,23 @@ export default function Cart() {
   const showToast = useUIStore((s) => s.showToast);
   const [promoInput, setPromoInput] = useState("");
   const [isSubmittingWhatsApp, setIsSubmittingWhatsApp] = useState(false);
+
+  // Delivery details and the server's quote for them
+  const [customerName, setCustomerName] = useState("");
+  const [addressLine, setAddressLine] = useState("");
+  const [pincode, setPincode] = useState("");
+  const [selectedPlace, setSelectedPlace] = useState<SelectedDeliveryPlace | null>(null);
+  const [confirmedLocation, setConfirmedLocation] = useState<DeliveryLocation | null>(null);
+  const [quote, setQuote] = useState<DeliveryQuote | null>(null);
+  const [isQuoting, setIsQuoting] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [quoteRequestId, setQuoteRequestId] = useState(0);
+
+  // The total the server recorded, shown again when the customer comes back from WhatsApp
+  const [recordedTotal, setRecordedTotal] = useState<number | null>(() => {
+    const stored = sessionStorage.getItem("rvf_whatsapp_attempt_total");
+    return stored ? Number(stored) : null;
+  });
 
   // Active WhatsApp order draft reference
   const [activeAttemptId, setActiveAttemptId] = useState<string | null>(() => {
@@ -89,8 +118,92 @@ export default function Cart() {
     };
   }, [items.length]);
 
+  // Quote again whenever the confirmed location, cart or promo code changes
+  const quoteLat = confirmedLocation?.lat;
+  const quoteLng = confirmedLocation?.lng;
+  const itemsKey = JSON.stringify(
+    items.map(({ productId, quantity, weight }) => ({ productId, quantity, weight }))
+  );
+
+  useEffect(() => {
+    setQuote(null);
+    setQuoteError(null);
+
+    if (quoteLat === undefined || quoteLng === undefined || itemsKey === "[]") {
+      setIsQuoting(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsQuoting(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const result = await deliveryService.getQuote(
+          {
+            location: { lat: quoteLat, lng: quoteLng },
+            items: JSON.parse(itemsKey),
+            promoCode: promoCode || undefined,
+          },
+          controller.signal
+        );
+        setQuote(result);
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setQuoteError(getErrorMessage(err));
+      } finally {
+        if (!controller.signal.aborted) setIsQuoting(false);
+      }
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [quoteLat, quoteLng, itemsKey, promoCode, quoteRequestId]);
+
+  const isOutOfRange = quote?.status === "out_of_range";
+  const deliveryCharge = quote?.deliveryCharge ?? null;
+  const displayDiscount = quote?.discount ?? summary.discount;
+  const displayTotal = quote?.finalAmount ?? summary.total;
+  const hasDeliveryDetails =
+    customerName.trim().length >= 2 &&
+    addressLine.trim().length >= 3 &&
+    /^\d{6}$/.test(pincode);
+  const canPlaceOrder =
+    hasDeliveryDetails && deliveryCharge !== null && !isQuoting && !isSubmittingWhatsApp;
+
+  // For addresses we can't price online: no order is recorded, they just message us
+  const handleMessageForQuote = () => {
+    const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER || "919XXXXXXXXX";
+    const itemsText = items
+      .map((item) => `- ${getCartItemLabel(item)} x${item.quantity}`)
+      .join("\n");
+    const deliverTo = [addressLine.trim(), selectedPlace?.formatted, pincode]
+      .filter(Boolean)
+      .join(", ");
+    const message = `Hi RV Foods! 🙏 Please share a delivery quote for:\n${itemsText}${
+      deliverTo ? `\n\nDeliver to: ${deliverTo}` : ""
+    }${confirmedLocation ? `\nMap pin: ${mapLink(confirmedLocation)}` : ""}${
+      customerName.trim() ? `\nName: ${customerName.trim()}` : ""
+    }`;
+    window.open(
+      `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  };
+
   const handleWhatsAppOrder = async () => {
-    if (isSubmittingWhatsApp || items.length === 0) return;
+    if (
+      !canPlaceOrder ||
+      !selectedPlace ||
+      !confirmedLocation ||
+      deliveryCharge === null ||
+      items.length === 0
+    ) {
+      return;
+    }
     setIsSubmittingWhatsApp(true);
 
     // Synchronously open a blank tab during the user click to prevent popup blockers after await
@@ -102,9 +215,18 @@ export default function Cart() {
         items: items.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,
+          weight: item.weight,
         })),
         promoCode: promoCode || undefined,
         attemptId: activeAttemptId || undefined,
+        customerName: customerName.trim(),
+        addressLine: addressLine.trim(),
+        formattedAddress: selectedPlace.formatted,
+        city: selectedPlace.city,
+        state: selectedPlace.state,
+        pincode,
+        location: confirmedLocation,
+        expectedDeliveryCharge: deliveryCharge,
       });
 
       if (!response.data?.orderId) {
@@ -115,16 +237,20 @@ export default function Cart() {
       setActiveAttemptId(orderRef);
       sessionStorage.setItem("rvf_whatsapp_attempt_id", orderRef);
       sessionStorage.setItem("rvf_awaiting_wa_confirm", orderRef);
+      setRecordedTotal(response.data.finalAmount);
+      sessionStorage.setItem("rvf_whatsapp_attempt_total", String(response.data.finalAmount));
 
       // 2. Format WhatsApp message including the unique order reference ID
       const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER || "919XXXXXXXXX";
       const itemsText = items
         .map(
           (item) =>
-            `- ${item.name} x${item.quantity} — ₹${item.price * item.quantity}`
+            `- ${getCartItemLabel(item)} x${item.quantity} — ₹${item.price * item.quantity}`
         )
         .join("\n");
-      const message = `Hi RV Foods! 🙏 I'd like to order:\nOrder Ref: ${orderRef}\n\n${itemsText}\n\nTotal: ₹${summary.total}\n\nPlease share payment details.`;
+      const deliveryText =
+        response.data.deliveryCharge === 0 ? "FREE" : `₹${response.data.deliveryCharge}`;
+      const message = `Hi RV Foods! 🙏 I'd like to order:\nOrder Ref: ${orderRef}\nName: ${customerName.trim()}\nDeliver to: ${addressLine.trim()}, ${selectedPlace.formatted}, ${pincode}\nMap pin: ${mapLink(confirmedLocation)}\n\n${itemsText}\n\nApprox. delivery charge: ${deliveryText}\nTotal: ₹${response.data.finalAmount}\n\nPlease share payment details.`;
       const encodedMessage = encodeURIComponent(message);
       const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
 
@@ -142,12 +268,19 @@ export default function Cart() {
         newTab.close();
       }
       console.error("Failed to log WhatsApp order:", err);
-      const apiError = err as { response?: { data?: { message?: string } }; message?: string };
+      const apiError = err as {
+        response?: { status?: number; data?: { message?: string } };
+        message?: string;
+      };
       const errorMessage =
         apiError?.response?.data?.message ||
         apiError?.message ||
         "Could not record order attempt. Please check your connection and try again.";
       showToast(errorMessage, "error");
+      // The charge changed since the quote: show the new amount before they retry
+      if (apiError?.response?.status === 409) {
+        setQuoteRequestId((id) => id + 1);
+      }
     } finally {
       setIsSubmittingWhatsApp(false);
     }
@@ -166,11 +299,13 @@ export default function Cart() {
         clearCart();
         sessionStorage.removeItem("rvf_awaiting_wa_confirm");
         sessionStorage.removeItem("rvf_whatsapp_attempt_id");
+        sessionStorage.removeItem("rvf_whatsapp_attempt_total");
         setActiveAttemptId(null);
+        setRecordedTotal(null);
         setShowConfirmModal(false);
         setConfirmedOrder({
           orderId: orderIdToConfirm,
-          finalAmount: summary.total,
+          finalAmount: res.data?.finalAmount ?? recordedTotal ?? displayTotal,
         });
         showToast(
           `Order confirmed successfully! Reference: ${orderIdToConfirm}`,
@@ -248,7 +383,7 @@ export default function Cart() {
             <div className="bg-[#FDFAF6] border border-border rounded-xl p-3.5 mb-6 text-xs text-text-secondary flex justify-between items-center">
               <span>{items.length} unique items in cart</span>
               <span className="font-bold text-text-primary text-sm">
-                Total: {formatCurrency(summary.total)}
+                Total: {formatCurrency(recordedTotal ?? displayTotal)}
               </span>
             </div>
 
@@ -411,13 +546,13 @@ export default function Cart() {
                 <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden divide-y divide-border">
                   {items.map((item) => (
                     <div
-                      key={item.productId}
+                      key={getCartLineId(item)}
                       className="p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 hover:bg-background/20 transition-colors"
                     >
                       {/* Image */}
                       <Link to={`/products/${item.slug}`} className="h-20 w-20 rounded-xl overflow-hidden border border-border bg-background shrink-0">
                         <img
-                          src={item.image || "/placeholder-product.jpg"}
+                          src={item.image || "/placeholder-product.svg"}
                           alt={item.name}
                           className="h-full w-full object-cover hover:scale-105 transition-transform duration-300"
                         />
@@ -427,7 +562,7 @@ export default function Cart() {
                       <div className="flex-grow min-w-0">
                         <Link to={`/products/${item.slug}`} className="hover:text-primary transition-colors">
                           <h3 className="font-semibold text-text-primary text-base truncate">
-                            {item.name}
+                            {getCartItemLabel(item)}
                           </h3>
                         </Link>
                         <p className="text-xs text-text-muted mt-1">
@@ -438,7 +573,7 @@ export default function Cart() {
                         <div className="flex items-center gap-4 mt-3">
                           <div className="flex items-center border border-border rounded-lg bg-background h-8">
                             <button
-                              onClick={() => decrementItem(item.productId)}
+                              onClick={() => decrementItem(getCartLineId(item))}
                               disabled={item.quantity <= 1}
                               className="px-2.5 h-full hover:bg-border transition-colors text-text-secondary disabled:opacity-50"
                               aria-label="Decrease quantity"
@@ -449,7 +584,7 @@ export default function Cart() {
                               {item.quantity}
                             </span>
                             <button
-                              onClick={() => incrementItem(item.productId)}
+                              onClick={() => incrementItem(getCartLineId(item))}
                               disabled={item.quantity >= item.stock}
                               className="px-2.5 h-full hover:bg-border transition-colors text-text-secondary disabled:opacity-50"
                               aria-label="Increase quantity"
@@ -459,7 +594,7 @@ export default function Cart() {
                           </div>
 
                           <button
-                            onClick={() => removeItem(item.productId)}
+                            onClick={() => removeItem(getCartLineId(item))}
                             className="text-xs text-text-secondary hover:text-error font-medium flex items-center gap-1 transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" /> Remove
@@ -474,7 +609,7 @@ export default function Cart() {
                         </span>
                         {item.stock <= 5 && (
                           <span className="text-[10px] text-accent font-semibold bg-accent-light/10 border border-accent/20 px-2 py-0.5 rounded-full mt-1 inline-block">
-                            Only {item.stock} left in stock
+                            Only a few left
                           </span>
                         )}
                       </div>
@@ -489,8 +624,22 @@ export default function Cart() {
                 </div>
               </div>
 
-              {/* Right Column: Order Summary & Coupon */}
+              {/* Right Column: Delivery, Order Summary & Coupon */}
               <div className="lg:col-span-4 space-y-6">
+                <DeliveryAddressForm
+                  customerName={customerName}
+                  onCustomerNameChange={setCustomerName}
+                  addressLine={addressLine}
+                  onAddressLineChange={setAddressLine}
+                  pincode={pincode}
+                  onPincodeChange={setPincode}
+                  selectedPlace={selectedPlace}
+                  onSelectPlace={setSelectedPlace}
+                  isLocationConfirmed={confirmedLocation !== null}
+                  onConfirmLocation={setConfirmedLocation}
+                  onMessageUs={handleMessageForQuote}
+                />
+
                 {/* Promo Code Card */}
                 <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
                   <h3 className="font-semibold text-text-primary text-sm flex items-center gap-2 mb-4">
@@ -553,57 +702,97 @@ export default function Cart() {
                       </span>
                     </div>
 
-                    {summary.discount > 0 && (
+                    {displayDiscount > 0 && (
                       <div className="flex justify-between text-sm text-success font-semibold">
                         <span>Discount</span>
-                        <span>-{formatCurrency(summary.discount)}</span>
+                        <span>-{formatCurrency(displayDiscount)}</span>
                       </div>
                     )}
 
                     <div className="flex justify-between text-sm text-text-secondary">
-                      <span>Delivery Fee</span>
-                      <span className={`font-semibold ${summary.deliveryFee === 0 ? "text-success" : "text-text-primary"}`}>
-                        {summary.deliveryFee === 0 ? "FREE" : formatCurrency(summary.deliveryFee)}
+                      <span>Approx. delivery charge</span>
+                      <span className={`font-semibold ${deliveryCharge === 0 ? "text-success" : "text-text-primary"}`}>
+                        {isQuoting
+                          ? "Calculating..."
+                          : isOutOfRange || quoteError
+                          ? "Not available"
+                          : deliveryCharge === null
+                          ? selectedPlace
+                            ? "Confirm location"
+                            : "Enter address"
+                          : deliveryCharge === 0
+                          ? "FREE"
+                          : formatCurrency(deliveryCharge)}
                       </span>
                     </div>
 
+                    {deliveryCharge !== null && deliveryCharge > 0 && !isQuoting && (
+                      <p className="text-xs text-text-secondary">
+                        Estimated delivery: {formatCurrency(deliveryCharge)}
+                        {quote?.status === "calculated" && quote.distanceKm !== null && ` (about ${quote.distanceKm} km by road)`}
+                        {quote?.status === "fallback" && " (flat rate, as we couldn't check the distance just now)"}
+                        . This is an estimate.
+                      </p>
+                    )}
+
+                    {quoteError && <p className="text-xs text-error">{quoteError}</p>}
+
                     <div className="border-t border-border pt-4 flex justify-between text-lg font-bold text-text-primary">
-                      <span>Total Amount</span>
-                      <span className="text-primary">{formatCurrency(summary.total)}</span>
+                      <span>{quote?.finalAmount != null ? "Total Amount" : "Total (excl. delivery)"}</span>
+                      <span className="text-primary">{formatCurrency(displayTotal)}</span>
                     </div>
                   </div>
 
-                  <div className="pt-2 space-y-3">
-                    <button
-                      type="button"
-                      onClick={handleWhatsAppOrder}
-                      disabled={isSubmittingWhatsApp}
-                      className="w-full bg-[#25D366] text-white hover:bg-[#1ebe57] disabled:opacity-60 disabled:cursor-not-allowed rounded-lg px-6 py-2.5 font-medium flex items-center justify-center gap-2 transition-colors duration-200"
-                    >
-                      {isSubmittingWhatsApp ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          Recording Order...
-                        </>
-                      ) : (
-                        <>
-                          <WhatsAppIcon className="w-5 h-5" />
-                          Order via WhatsApp
-                        </>
-                      )}
-                    </button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => useUIStore.getState().openUPIModal()}
-                      className="w-full h-11 text-sm font-semibold border-border bg-white"
-                    >
-                      <QrCode className="w-4 h-4 mr-2" /> Pay via UPI QR
-                    </Button>
-                    <p className="text-[10px] text-text-secondary text-center mt-3">
-                      You'll be redirected to WhatsApp to confirm your order
-                    </p>
-                  </div>
+                  {isOutOfRange ? (
+                    <div className="pt-2 space-y-3">
+                      <p className="text-xs text-text-primary bg-accent-light/20 border border-accent/20 rounded-xl p-3">
+                        Delivery is not available to this address online. Message us and we'll send you a quote.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleMessageForQuote}
+                        className="w-full bg-[#25D366] text-white hover:bg-[#1ebe57] rounded-lg px-6 py-2.5 font-medium flex items-center justify-center gap-2 transition-colors duration-200"
+                      >
+                        <WhatsAppIcon className="w-5 h-5" />
+                        Message us for a quote
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="pt-2 space-y-3">
+                      <button
+                        type="button"
+                        onClick={handleWhatsAppOrder}
+                        disabled={!canPlaceOrder}
+                        className="w-full bg-[#25D366] text-white hover:bg-[#1ebe57] disabled:opacity-60 disabled:cursor-not-allowed rounded-lg px-6 py-2.5 font-medium flex items-center justify-center gap-2 transition-colors duration-200"
+                      >
+                        {isSubmittingWhatsApp ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            Recording Order...
+                          </>
+                        ) : (
+                          <>
+                            <WhatsAppIcon className="w-5 h-5" />
+                            Order via WhatsApp
+                          </>
+                        )}
+                      </button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => useUIStore.getState().openUPIModal()}
+                        disabled={!canPlaceOrder}
+                        className="w-full h-11 text-sm font-semibold border-border bg-white"
+                      >
+                        <QrCode className="w-4 h-4 mr-2" /> Pay via UPI QR
+                      </Button>
+                      <p className="text-[10px] text-text-secondary text-center mt-3">
+                        {canPlaceOrder || isQuoting || isSubmittingWhatsApp
+                          ? "You'll be redirected to WhatsApp to confirm your order"
+                          : "Fill in your delivery details above to continue"}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

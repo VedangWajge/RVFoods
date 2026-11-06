@@ -70,8 +70,10 @@ export const TRUST_ITEMS = [
   { title: "COD Available", description: "Pay on delivery" },
 ] as const;
 
-export const DELIVERY_FEE = 49;
-export const FREE_DELIVERY_THRESHOLD = 999;
+/** Display only. The server decides the charge: see server/src/config/delivery.ts */
+export const FREE_DELIVERY_THRESHOLD = 2000;
+/** Search prefers places near the shop. Prices use SHOP_LAT_LNG on the server. */
+export const DELIVERY_SEARCH_CENTER = { lat: 19.1767738, lng: 72.9542814 };
 export const CURRENCY = "INR";
 export const CURRENCY_SYMBOL = "₹";
 

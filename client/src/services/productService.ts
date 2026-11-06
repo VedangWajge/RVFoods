@@ -36,6 +36,7 @@ export const productService = {
     if (filters.maxPrice !== undefined) params.maxPrice = String(filters.maxPrice);
     if (filters.minRating !== undefined) params.minRating = String(filters.minRating);
     if (filters.isFeatured !== undefined) params.featured = String(filters.isFeatured);
+    if (filters.includeHidden) params.includeHidden = "true";
     if (filters.page !== undefined) params.page = String(filters.page);
     if (filters.limit !== undefined) params.limit = String(filters.limit);
 

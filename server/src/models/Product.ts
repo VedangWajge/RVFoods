@@ -17,15 +17,32 @@ export interface IProductRatings {
   count: number;
 }
 
-export interface IProduct extends Document {
-  name: string;
-  slug: string;
-  category: ProductCategory;
-  description: string;
-  shortDescription: string;
+export interface IProductVariant {
+  /** The size customers pick, such as "250g" or "1 piece" */
+  weight: string;
   price: number;
   discountPrice?: number;
   stock: number;
+}
+
+export interface IProduct extends Document {
+  name: string;
+  slug: string;
+  /** Main category: the one shown on product badges */
+  category: ProductCategory;
+  /** Every category the product is listed under, including the main one */
+  categories: ProductCategory[];
+  description: string;
+  shortDescription: string;
+  /**
+   * With variants, these three summarise them so sorting and filtering keep working:
+   * price and discountPrice are the cheapest size's, stock is the total.
+   */
+  price: number;
+  discountPrice?: number;
+  stock: number;
+  /** Empty for a product sold in one size only */
+  variants: IProductVariant[];
   images: IProductImage[];
   ingredients: string[];
   benefits: string[];
@@ -53,6 +70,16 @@ const ratingsSchema = new Schema<IProductRatings>(
   { _id: false }
 );
 
+const productVariantSchema = new Schema<IProductVariant>(
+  {
+    weight: { type: String, required: true, trim: true },
+    price: { type: Number, required: true, min: 0 },
+    discountPrice: { type: Number, min: 0 },
+    stock: { type: Number, default: 0, min: 0 },
+  },
+  { _id: false }
+);
+
 const productSchema = new Schema<IProduct>(
   {
     name: {
@@ -70,6 +97,11 @@ const productSchema = new Schema<IProduct>(
       type: String,
       required: [true, "Category is required"],
       enum: ["spices", "ghee", "sweets", "snacks", "combo"],
+    },
+    categories: {
+      type: [String],
+      enum: ["spices", "ghee", "sweets", "snacks", "combo"],
+      default: [],
     },
     description: {
       type: String,
@@ -112,6 +144,10 @@ const productSchema = new Schema<IProduct>(
       default: 0,
       min: [0, "Stock cannot be negative"],
     },
+    variants: {
+      type: [productVariantSchema],
+      default: [],
+    },
     images: {
       type: [productImageSchema],
       default: [],
@@ -147,6 +183,7 @@ const productSchema = new Schema<IProduct>(
 );
 
 productSchema.index({ category: 1, isActive: 1 });
+productSchema.index({ categories: 1, isActive: 1 });
 productSchema.index({ isFeatured: 1 });
 productSchema.index({ name: "text", description: "text" });
 

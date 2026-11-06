@@ -5,16 +5,21 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { connectDB, disconnectDB } from "./config/db.js";
 import { sendSuccess } from "./utils/apiResponse.js";
-import { generalLimiter, authLimiter } from "./middleware/rateLimiter.js";
+import { generalLimiter, authLimiter, deliveryLimiter } from "./middleware/rateLimiter.js";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
 import authRoutes from "./routes/authRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import deliveryRoutes from "./routes/deliveryRoutes.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
+
+// Render sits in front of the app. Without this, rate limits see the proxy's IP
+// and every customer shares one limit.
+app.set("trust proxy", 1);
 
 const allowedOrigins = [
   "http://localhost:5173",
@@ -67,6 +72,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/delivery", deliveryLimiter, deliveryRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/admin", adminRoutes);
 

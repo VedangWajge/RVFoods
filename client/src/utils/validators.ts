@@ -105,15 +105,42 @@ export const productFilterSchema = z.object({
   limit: z.coerce.number().int().min(1).max(48).optional(),
 });
 
+const productSizeSchema = z.object({
+  weight: z.string().trim().min(1, "Enter a size"),
+  price: z.coerce.number().positive("Enter a price"),
+  // A blank field arrives as "", which would otherwise be read as 0 and rejected.
+  discountPrice: z.preprocess(
+    (value) => (value === "" || value === null ? undefined : value),
+    z.coerce.number().positive("Must be above 0").optional()
+  ),
+  stock: z.coerce.number().int("Whole numbers only").min(0, "Can't be negative"),
+});
+
 export const createProductSchema = z.object({
   name: z.string().min(2, "Product name is required"),
-  category: z.enum(productCategories),
-  description: z.string().min(10, "Description is required"),
-  shortDescription: z.string().max(120, "Short description too long"),
-  price: z.coerce.number().positive("Price must be positive"),
-  discountPrice: z.coerce.number().positive().optional(),
-  stock: z.coerce.number().int().min(0),
-  weight: z.string().min(1, "Weight is required"),
+  categories: z.array(z.enum(productCategories)).min(1, "Select at least one category"),
+  description: z.string().optional(),
+  shortDescription: z.string().max(120, "Short description too long").optional(),
+  sizes: z
+    .array(productSizeSchema)
+    .min(1, "Add at least one size")
+    .superRefine((sizes, ctx) => {
+      const seen = new Set<string>();
+      sizes.forEach((size, index) => {
+        const key = size.weight.toLowerCase();
+        if (seen.has(key)) {
+          ctx.addIssue({ code: "custom", message: "Already listed", path: [index, "weight"] });
+        }
+        seen.add(key);
+        if (size.discountPrice !== undefined && size.discountPrice >= size.price) {
+          ctx.addIssue({
+            code: "custom",
+            message: "Must be below the price",
+            path: [index, "discountPrice"],
+          });
+        }
+      });
+    }),
   ingredients: z.array(z.string()).optional(),
   benefits: z.array(z.string()).optional(),
   isFeatured: z.boolean().optional(),

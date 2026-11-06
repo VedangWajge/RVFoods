@@ -1,6 +1,7 @@
 import { api } from "./api";
 import type { ApiResponse } from "@/types/api.types";
 import type {
+  ConfirmWhatsAppOrderResponse,
   Order,
   LogWhatsAppOrderPayload,
   LogWhatsAppOrderResponse,
@@ -23,8 +24,10 @@ export const orderService = {
   /**
    * Confirm WhatsApp order (customer placed order via WhatsApp)
    */
-  async confirmWhatsAppOrder(orderId: string): Promise<ApiResponse<Order>> {
-    const { data } = await api.post<ApiResponse<Order>>(
+  async confirmWhatsAppOrder(
+    orderId: string
+  ): Promise<ApiResponse<ConfirmWhatsAppOrderResponse>> {
+    const { data } = await api.post<ApiResponse<ConfirmWhatsAppOrderResponse>>(
       "/orders/confirm-whatsapp",
       { orderId }
     );

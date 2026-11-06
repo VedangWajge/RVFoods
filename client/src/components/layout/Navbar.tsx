@@ -1,6 +1,8 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Menu, ShoppingCart, User, LogOut, Package, Shield, Trash2, ShoppingBag } from "lucide-react";
 import { BRAND, NAV_LINKS } from "@/utils/constants";
+import BrandLogo from "@/components/common/BrandLogo";
+import { getCartItemLabel, getCartLineId } from "@/utils/cartHelpers";
 import { motion } from "framer-motion";
 
 const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER || "919876543210";
@@ -91,15 +93,15 @@ function CartButton() {
           ) : (
             <>
               {items.slice(0, 3).map((item) => (
-                <div key={item.productId} className="flex items-center gap-3 py-2.5 group/item">
+                <div key={getCartLineId(item)} className="flex items-center gap-3 py-2.5 group/item">
                   <img
-                    src={item.image || "/placeholder-product.jpg"}
+                    src={item.image || "/placeholder-product.svg"}
                     alt={item.name}
                     className="w-10 h-10 object-cover rounded-lg border border-border/80 bg-background"
                   />
                   <div className="flex-grow min-w-0">
                     <p className="text-xs font-semibold text-text-primary truncate group-hover/item:text-primary transition-colors">
-                      {item.name}
+                      {getCartItemLabel(item)}
                     </p>
                     <p className="text-[10px] text-text-secondary mt-0.5">
                       {item.quantity} × {formatCurrency(item.price)}
@@ -109,10 +111,10 @@ function CartButton() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      removeItem(item.productId);
+                      removeItem(getCartLineId(item));
                     }}
                     className="text-text-muted hover:text-error p-1 hover:bg-error/5 rounded transition-colors"
-                    aria-label={`Remove ${item.name} from cart`}
+                    aria-label={`Remove ${getCartItemLabel(item)} from cart`}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -274,7 +276,8 @@ function MobileMenu() {
     >
       <SheetContent side="right" className="flex w-[min(100%,20rem)] flex-col border-l-4 border-primary">
         <SheetHeader>
-          <SheetTitle className="font-heading text-primary">
+          <SheetTitle className="font-heading text-primary flex items-center gap-2">
+            <BrandLogo className="h-12 w-12" />
             {BRAND.name}
           </SheetTitle>
         </SheetHeader>
@@ -345,13 +348,9 @@ export default function Navbar() {
       <div className="container-main flex h-full items-center justify-between">
         <Link
           to="/"
-          className="flex items-center gap-1.5 transition-opacity hover:opacity-90 select-none group py-1"
+          className="flex items-center transition-opacity hover:opacity-90 select-none"
         >
-          <span className="text-2xl" role="img" aria-label="diya">🪔</span>
-          <div className="flex flex-col -space-y-0.5">
-            <span className="font-heading text-lg font-bold text-primary sm:text-xl tracking-tight leading-tight">RV Foods</span>
-            <span className="text-[9px] font-semibold tracking-widest text-accent uppercase font-marathi leading-none">& Snacks</span>
-          </div>
+          <BrandLogo className="h-14 w-14" />
         </Link>
 
         <nav

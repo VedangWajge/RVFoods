@@ -1,14 +1,15 @@
 import type { Response, Request } from "express";
 import { Product } from "../models/Product.js";
 import { sendSuccess } from "../utils/apiResponse.js";
+import { buildProductListPipeline } from "../utils/productListing.js";
 import { asyncHandler, AppError } from "../middleware/errorHandler.js";
 import { uploadImage, deleteImage } from "../config/cloudinary.js";
 import {
   createProductSchema,
   updateProductSchema,
   getProductQuerySchema,
-  type CreateProductInput,
-  type UpdateProductInput,
+  withConsistentCategories,
+  withVariantSummary,
 } from "../validators/productSchemas.js";
 import type { AuthRequest } from "../middleware/authMiddleware.js";
 
@@ -16,7 +17,7 @@ import type { AuthRequest } from "../middleware/authMiddleware.js";
 // @route   GET /api/products
 // @access  Public
 export const getProducts = asyncHandler(
-  async (req: Request, res: Response) => {
+  async (req: AuthRequest, res: Response) => {
     const query = getProductQuerySchema.parse(req.query);
 
     const {
@@ -29,13 +30,16 @@ export const getProducts = asyncHandler(
       page = "1",
       limit = "12",
       featured,
+      includeHidden,
     } = query;
 
-    // Build query
-    const filter: any = { isActive: true };
+    // Build query. Only an admin can list hidden products, so they can be turned back on.
+    const canSeeHidden = includeHidden === "true" && req.user?.role === "admin";
+    const filter: any = canSeeHidden ? {} : { isActive: true };
 
     if (category) {
-      filter.category = category;
+      // Older products have only `category`, so match on either field.
+      filter.$or = [{ category }, { categories: category }];
     }
 
     if (featured === "true") {
@@ -56,36 +60,13 @@ export const getProducts = asyncHandler(
       filter["ratings.average"] = { $gte: parseFloat(minRating) };
     }
 
-    // Build sort
-    let sortObj: any = {};
-    switch (sort) {
-      case "price-asc":
-        sortObj = { price: 1 };
-        break;
-      case "price-desc":
-        sortObj = { price: -1 };
-        break;
-      case "rating-desc":
-        sortObj = { "ratings.average": -1 };
-        break;
-      case "newest":
-        sortObj = { createdAt: -1 };
-        break;
-      default:
-        sortObj = { createdAt: -1 };
-    }
-
     // Pagination
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
 
     const [products, total] = await Promise.all([
-      Product.find(filter)
-        .sort(sortObj)
-        .skip(skip)
-        .limit(limitNum)
-        .lean(),
+      Product.aggregate(buildProductListPipeline(filter, sort, skip, limitNum)),
       Product.countDocuments(filter),
     ]);
 
@@ -127,11 +108,13 @@ export const getProductBySlug = asyncHandler(
 // @access  Admin
 export const createProduct = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    const validatedData: CreateProductInput = createProductSchema.parse(
-      req.body
+    const { discountPrice, ...fields } = withVariantSummary(
+      withConsistentCategories(createProductSchema.parse(req.body))
     );
 
-    const product = await Product.create(validatedData);
+    const product = await Product.create(
+      discountPrice == null ? fields : { ...fields, discountPrice }
+    );
 
     sendSuccess(res, "Product created successfully", product, 201);
   }
@@ -144,15 +127,20 @@ export const updateProduct = asyncHandler(
   async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
-    const validatedData: UpdateProductInput = updateProductSchema.parse(
-      req.body
+    const { discountPrice, ...fields } = withVariantSummary(
+      withConsistentCategories(updateProductSchema.parse(req.body))
     );
 
-    const product = await Product.findByIdAndUpdate(
-      id,
-      { $set: validatedData },
-      { new: true, runValidators: true }
-    );
+    // Saving null can't remove a value, so a cleared discount has to be unset.
+    const update =
+      discountPrice === null
+        ? { $set: fields, $unset: { discountPrice: 1 } }
+        : { $set: discountPrice === undefined ? fields : { ...fields, discountPrice } };
+
+    const product = await Product.findByIdAndUpdate(id, update, {
+      new: true,
+      runValidators: true,
+    });
 
     if (!product) {
       throw new AppError("Product not found", 404);

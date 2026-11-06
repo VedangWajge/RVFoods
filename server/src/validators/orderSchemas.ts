@@ -3,6 +3,14 @@ import { z } from "zod";
 export const orderProductItemSchema = z.object({
   productId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid product ID"),
   quantity: z.number().int().positive("Quantity must be a positive integer"),
+  /** The size chosen, for products sold in several sizes */
+  weight: z.string().trim().max(30).optional(),
+});
+
+// The map pin. The ranges cover India, so a bad value never costs a Google lookup.
+export const deliveryLocationSchema = z.object({
+  lat: z.number().min(6, "Please choose a location in India").max(38, "Please choose a location in India"),
+  lng: z.number().min(68, "Please choose a location in India").max(98, "Please choose a location in India"),
 });
 
 export const shippingAddressSchema = z.object({
@@ -52,14 +60,22 @@ export const updateOrderPaymentStatusSchema = z.object({
 export const whatsappOrderAttemptSchema = z.object({
   attemptId: z.string().optional(),
   items: z
-    .array(
-      z.object({
-        productId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid product ID"),
-        quantity: z.number().int().positive("Quantity must be a positive integer"),
-      })
-    )
+    .array(orderProductItemSchema)
     .min(1, "Order must contain at least one product"),
   promoCode: z.string().optional(),
+  customerName: z.string().trim().min(2, "Please enter your name").max(80),
+  addressLine: z
+    .string()
+    .trim()
+    .min(3, "Please enter your flat, building and road")
+    .max(200),
+  formattedAddress: z.string().trim().min(3, "Please select your address").max(300),
+  city: z.string().trim().max(100).optional(),
+  state: z.string().trim().max(100).optional(),
+  pincode: z.string().regex(/^\d{6}$/, "Please enter your 6-digit PIN code"),
+  location: deliveryLocationSchema,
+  // Only compared with the server's own figure, never used as the price.
+  expectedDeliveryCharge: z.number().min(0),
 });
 
 export const confirmWhatsAppOrderSchema = z.object({

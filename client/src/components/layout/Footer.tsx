@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { MapPin, Phone, MessageCircle } from "lucide-react";
 import { InstagramIcon } from "@/components/common/SocialIcons";
+import BrandLogo from "@/components/common/BrandLogo";
 
 const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER || "919876543210";
 const whatsappUrl = `https://wa.me/${whatsappNumber}?text=Hi%20RV%20Foods!%20%F0%9F%99%8F%20I%27d%20like%20to%20order%20some%20traditional%20snacks%20and%20masale.`;
@@ -13,12 +14,8 @@ export default function Footer() {
           
           {/* Column 1: Brand */}
           <div className="space-y-4">
-            <Link to="/" className="inline-flex items-center gap-1.5 select-none py-1">
-              <span className="text-xl animate-pulse" role="img" aria-label="diya">🪔</span>
-              <div className="flex flex-col -space-y-0.5">
-                <span className="font-heading text-lg font-bold text-primary sm:text-xl tracking-tight leading-tight">RV Foods</span>
-                <span className="text-[9px] font-semibold tracking-widest text-accent uppercase font-marathi leading-none">& Snacks</span>
-              </div>
+            <Link to="/" className="inline-flex select-none">
+              <BrandLogo className="h-28 w-28" />
             </Link>
             
             <p className="text-sm font-semibold tracking-wide text-white/95">

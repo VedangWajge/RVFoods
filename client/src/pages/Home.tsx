@@ -31,7 +31,7 @@ export default function Home() {
 
       {/* Thin Festive Announcement Banner */}
       <div className="bg-primary text-white text-center text-xs py-1.5 px-4 font-medium tracking-wide select-none">
-        🚚 Free delivery on orders above ₹999 across Maharashtra
+        🚚 Free delivery on orders above ₹2000 within our delivery area
       </div>
 
       {/* A) HERO SECTION */}

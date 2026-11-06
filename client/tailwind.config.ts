@@ -59,6 +59,8 @@ const config: Config = {
           cream: '#FDF6EC',     // Warm cream
           orange: '#F4742B',    // Bright marigold orange
         },
+        success: '#2D6A4F',
+        error: '#C0392B',
         background: '#FDFAF6',
         surface: '#FFFFFF',
         text: {

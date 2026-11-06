@@ -141,7 +141,7 @@ export default function OrderCard({ order }: OrderCardProps) {
                     <div key={item.productId} className="p-4 flex items-center gap-4 hover:bg-background/20 transition-colors">
                       <div className="w-14 h-14 rounded-lg overflow-hidden border border-border bg-background shrink-0">
                         <img
-                          src={item.image || "/placeholder-product.jpg"}
+                          src={item.image || "/placeholder-product.svg"}
                           alt={item.name}
                           className="w-full h-full object-cover"
                         />
@@ -172,6 +172,14 @@ export default function OrderCard({ order }: OrderCardProps) {
                     {order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.pincode},<br />
                     {order.shippingAddress.country}
                   </p>
+                  {order.deliveryChargeSource && (
+                    <p className="text-xs text-text-secondary">
+                      Approx. delivery charge:{" "}
+                      <span className="font-semibold text-text-primary">
+                        {order.deliveryCharge === 0 ? "FREE" : formatCurrency(order.deliveryCharge ?? 0)}
+                      </span>
+                    </p>
+                  )}
                 </div>
 
                 {/* Payment */}
