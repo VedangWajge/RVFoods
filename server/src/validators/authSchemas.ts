@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+export const googleLoginSchema = z.object({
+  credential: z.string().min(1, "Google sign-in failed. Please try again.").max(5000),
+});
+
 export const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),

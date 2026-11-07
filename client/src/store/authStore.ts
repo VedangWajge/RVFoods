@@ -23,9 +23,10 @@ interface AuthState {
   clearError: () => void;
   initializeAuth: () => Promise<void>;
   login: (credentials: LoginCredentials) => Promise<void>;
+  loginWithGoogle: (credential: string) => Promise<void>;
   register: (
     payload: RegisterPayload
-  ) => Promise<{ email: string; devOtp?: string }>;
+  ) => Promise<{ email: string }>;
   verifyEmail: (payload: VerifyEmailPayload) => Promise<void>;
   logout: () => Promise<void>;
   fetchMe: () => Promise<void>;
@@ -130,6 +131,26 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
+      loginWithGoogle: async (credential) => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await authService.googleLogin(credential);
+          const payload = response.data;
+
+          if (!payload?.accessToken || !payload?.user) {
+            throw new Error(response.message || "Google sign-in failed");
+          }
+
+          set({
+            ...setSession(payload.user, payload.accessToken),
+            isLoading: false,
+          });
+        } catch (error) {
+          set({ isLoading: false, error: getErrorMessage(error) });
+          throw error;
+        }
+      },
+
       register: async (payload) => {
         set({ isLoading: true, error: null });
         try {
@@ -143,10 +164,7 @@ export const useAuthStore = create<AuthState>()(
           }
 
           set({ isLoading: false });
-          return {
-            email: response.data.user.email,
-            devOtp: response.data.devOtp,
-          };
+          return { email: response.data.user.email };
         } catch (error) {
           set({ isLoading: false, error: getErrorMessage(error) });
           throw error;

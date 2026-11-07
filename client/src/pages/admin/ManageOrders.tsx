@@ -448,8 +448,8 @@ export default function ManageOrders() {
                                         </p>
                                         <p>{order.shippingAddress.street}</p>
                                         <p>
-                                          {order.shippingAddress.city}, {order.shippingAddress.state} -{" "}
-                                          {order.shippingAddress.pincode}
+                                          {order.shippingAddress.city}, {order.shippingAddress.state}
+                                          {order.shippingAddress.pincode ? ` - ${order.shippingAddress.pincode}` : ""}
                                         </p>
                                         <p className="text-xs mt-1 text-text-muted">
                                           Country: {order.shippingAddress.country}

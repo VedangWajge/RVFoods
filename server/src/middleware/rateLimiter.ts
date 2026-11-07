@@ -14,7 +14,7 @@ export const generalLimiter = rateLimit({
 // Each quote uses up a Google route lookup, so this limit is tighter.
 export const deliveryLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === "development" ? 5000 : 30,
+  max: process.env.NODE_ENV === "development" ? 5000 : 60,
   standardHeaders: true,
   legacyHeaders: false,
   message: {

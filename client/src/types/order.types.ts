@@ -127,12 +127,12 @@ export interface LogWhatsAppOrderPayload {
   items: LogWhatsAppOrderItem[];
   promoCode?: string;
   attemptId?: string;
-  customerName: string;
-  addressLine: string;
+  customerName?: string;
+  addressLine?: string;
   formattedAddress: string;
   city?: string;
   state?: string;
-  pincode: string;
+  pincode?: string;
   location: DeliveryLocation;
   expectedDeliveryCharge: number;
 }
@@ -159,6 +159,7 @@ export interface SelectedDeliveryPlace extends DeliveryLocation {
   formatted: string;
   city?: string;
   state?: string;
+  postcode?: string;
 }
 
 export interface DeliveryQuotePayload {

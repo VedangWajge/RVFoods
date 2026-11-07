@@ -12,7 +12,6 @@ import { api } from "./api";
 
 interface RegisterResponseData {
   user: UserPublic;
-  devOtp?: string;
 }
 
 export const authService = {
@@ -29,6 +28,13 @@ export const authService = {
       "/auth/login",
       credentials
     );
+    return data;
+  },
+
+  googleLogin: async (credential: string) => {
+    const { data } = await api.post<ApiResponse<AuthResponse>>("/auth/google", {
+      credential,
+    });
     return data;
   },
 
@@ -56,7 +62,7 @@ export const authService = {
   },
 
   resendOtp: async (email: string) => {
-    const { data } = await api.post<ApiResponse<{ devOtp?: string }>>(
+    const { data } = await api.post<ApiResponse>(
       "/auth/resend-otp",
       { email: email.toLowerCase().trim() }
     );

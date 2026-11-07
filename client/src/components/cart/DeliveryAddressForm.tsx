@@ -12,6 +12,8 @@ const SEARCH_DEBOUNCE_MS = 350;
 const SEARCH_BIAS_RADIUS_METERS = 30000;
 
 interface DeliveryAddressFormProps {
+  /** Signed-in customers don't see this: their name comes from their profile. */
+  showNameField: boolean;
   customerName: string;
   onCustomerNameChange: (value: string) => void;
   addressLine: string;
@@ -20,8 +22,8 @@ interface DeliveryAddressFormProps {
   onPincodeChange: (value: string) => void;
   selectedPlace: SelectedDeliveryPlace | null;
   onSelectPlace: (place: SelectedDeliveryPlace | null) => void;
-  isLocationConfirmed: boolean;
-  onConfirmLocation: (location: DeliveryLocation | null) => void;
+  onLocationChange: (location: DeliveryLocation | null) => void;
+  showAddressHint: boolean;
   onMessageUs: () => void;
 }
 
@@ -30,6 +32,7 @@ const getComponent = (place: google.maps.places.Place, type: string) =>
   undefined;
 
 export default function DeliveryAddressForm({
+  showNameField,
   customerName,
   onCustomerNameChange,
   addressLine,
@@ -38,8 +41,8 @@ export default function DeliveryAddressForm({
   onPincodeChange,
   selectedPlace,
   onSelectPlace,
-  isLocationConfirmed,
-  onConfirmLocation,
+  onLocationChange,
+  showAddressHint,
   onMessageUs,
 }: DeliveryAddressFormProps) {
   const [searchText, setSearchText] = useState("");
@@ -47,6 +50,7 @@ export default function DeliveryAddressForm({
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [isMapOpen, setIsMapOpen] = useState(false);
 
   // Google bills one search-and-select as a session, tied together by this token.
   const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
@@ -115,18 +119,25 @@ export default function DeliveryAddressForm({
         throw new Error("Selected place has no location");
       }
 
-      onConfirmLocation(null);
+      const lat = place.location.lat();
+      const lng = place.location.lng();
+      const postcode = getComponent(place, "postal_code");
+
       onSelectPlace({
         formatted: place.formattedAddress,
         city:
           getComponent(place, "locality") ??
           getComponent(place, "administrative_area_level_3"),
         state: getComponent(place, "administrative_area_level_1"),
-        lat: place.location.lat(),
-        lng: place.location.lng(),
+        postcode,
+        lat,
+        lng,
       });
+      // Picking an address is enough: the charge appears straight away.
+      onLocationChange({ lat, lng });
       // Clear rather than keep the previous address's PIN when this one has none
-      onPincodeChange(getComponent(place, "postal_code") ?? "");
+      onPincodeChange(postcode ?? "");
+      setIsMapOpen(false);
       setSearchText("");
       setSuggestions([]);
       sessionTokenRef.current = null;
@@ -140,40 +151,46 @@ export default function DeliveryAddressForm({
 
   const handleClearPlace = () => {
     onSelectPlace(null);
-    onConfirmLocation(null);
+    onLocationChange(null);
+    onPincodeChange("");
+    setIsMapOpen(false);
   };
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-border shadow-sm space-y-4">
+    <div
+      id="delivery-details"
+      className={`bg-white p-6 rounded-2xl border shadow-sm space-y-4 transition-colors ${
+        showAddressHint ? "border-error" : "border-border"
+      }`}
+    >
       <h3 className="font-semibold text-text-primary text-sm flex items-center gap-2">
         <MapPin className="w-4 h-4 text-primary" /> Delivery Details
       </h3>
 
       <div className="space-y-1.5">
-        <Label htmlFor="delivery-name" className="text-xs">Your Name</Label>
-        <Input
-          id="delivery-name"
-          value={customerName}
-          onChange={(e) => onCustomerNameChange(e.target.value)}
-          placeholder="Full name"
-          autoComplete="name"
-          maxLength={80}
-          className="h-10 text-sm"
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="delivery-search" className="text-xs">Delivery Address</Label>
+        <Label htmlFor="delivery-search" className="text-xs">
+          Delivery Address <span className="text-error" aria-hidden>*</span>
+          <span className="sr-only"> (required)</span>
+        </Label>
         {selectedPlace ? (
-          <div className="flex items-start justify-between gap-2 bg-[#FDFAF6] border border-border rounded-xl p-3 text-xs text-text-primary">
-            <span>{selectedPlace.formatted}</span>
+          <div className="space-y-2">
+            <div className="flex items-start justify-between gap-2 bg-[#FDFAF6] border border-border rounded-xl p-3 text-xs text-text-primary">
+              <span>{selectedPlace.formatted}</span>
+              <button
+                type="button"
+                onClick={handleClearPlace}
+                className="text-text-secondary hover:text-error shrink-0"
+                aria-label="Change address"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             <button
               type="button"
-              onClick={handleClearPlace}
-              className="text-text-secondary hover:text-error shrink-0"
-              aria-label="Change address"
+              onClick={() => setIsMapOpen((open) => !open)}
+              className="text-xs font-semibold text-primary hover:underline"
             >
-              <X className="w-4 h-4" />
+              {isMapOpen ? "Hide map" : "Adjust pin on map (optional)"}
             </button>
           </div>
         ) : (
@@ -185,6 +202,8 @@ export default function DeliveryAddressForm({
               placeholder="Search your building, road or area"
               autoComplete="off"
               maxLength={200}
+              aria-required
+              aria-invalid={showAddressHint}
               className="h-10 text-sm pr-9"
             />
             {isSearching && (
@@ -208,6 +227,12 @@ export default function DeliveryAddressForm({
           </div>
         )}
 
+        {showAddressHint && (
+          <p className="text-xs font-medium text-error" role="alert">
+            Please enter your delivery address to see the delivery charge.
+          </p>
+        )}
+
         {searchError && <p className="text-xs text-error">{searchError}</p>}
 
         {!selectedPlace && (searchError || (hasSearched && suggestions.length === 0)) && (
@@ -227,39 +252,61 @@ export default function DeliveryAddressForm({
         {!selectedPlace && <p className="text-[10px] text-text-muted">Powered by Google</p>}
       </div>
 
-      {selectedPlace && (
+      {selectedPlace && isMapOpen && (
         <DeliveryMapPicker
           center={{ lat: selectedPlace.lat, lng: selectedPlace.lng }}
-          isConfirmed={isLocationConfirmed}
-          onConfirm={onConfirmLocation}
+          onLocationChange={onLocationChange}
         />
       )}
 
       <div className="space-y-1.5">
-        <Label htmlFor="delivery-line" className="text-xs">Flat, Building and Road</Label>
+        <Label htmlFor="delivery-line" className="text-xs">
+          Flat and Building <span className="font-normal text-text-muted">(optional)</span>
+        </Label>
         <Input
           id="delivery-line"
           value={addressLine}
           onChange={(e) => onAddressLineChange(e.target.value)}
-          placeholder="e.g. Flat 402, Sai Niwas, LBS Road"
+          placeholder="e.g. Flat 402, Sai Niwas"
           autoComplete="address-line1"
           maxLength={200}
           className="h-10 text-sm"
         />
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="delivery-pincode" className="text-xs">PIN Code</Label>
-        <Input
-          id="delivery-pincode"
-          value={pincode}
-          onChange={(e) => onPincodeChange(e.target.value.replace(/\D/g, "").slice(0, 6))}
-          placeholder="6-digit PIN code"
-          autoComplete="postal-code"
-          inputMode="numeric"
-          className="h-10 text-sm"
-        />
-      </div>
+      {selectedPlace && !selectedPlace.postcode && (
+        <div className="space-y-1.5">
+          <Label htmlFor="delivery-pincode" className="text-xs">
+            PIN Code <span className="font-normal text-text-muted">(optional)</span>
+          </Label>
+          <Input
+            id="delivery-pincode"
+            value={pincode}
+            onChange={(e) => onPincodeChange(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="6-digit PIN code"
+            autoComplete="postal-code"
+            inputMode="numeric"
+            className="h-10 text-sm"
+          />
+        </div>
+      )}
+
+      {showNameField && (
+        <div className="space-y-1.5">
+          <Label htmlFor="delivery-name" className="text-xs">
+            Your Name <span className="font-normal text-text-muted">(optional)</span>
+          </Label>
+          <Input
+            id="delivery-name"
+            value={customerName}
+            onChange={(e) => onCustomerNameChange(e.target.value)}
+            placeholder="Full name"
+            autoComplete="name"
+            maxLength={80}
+            className="h-10 text-sm"
+          />
+        </div>
+      )}
     </div>
   );
 }

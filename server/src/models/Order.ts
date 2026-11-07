@@ -72,7 +72,7 @@ const shippingAddressSchema = new Schema<IShippingAddress>(
     street: { type: String, required: true, trim: true },
     city: { type: String, required: true, trim: true },
     state: { type: String, required: true, trim: true },
-    pincode: { type: String, required: true, trim: true },
+    pincode: { type: String, default: "", trim: true },
     country: { type: String, required: true, trim: true, default: "India" },
   },
   { _id: false }

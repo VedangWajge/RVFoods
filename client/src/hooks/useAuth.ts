@@ -18,6 +18,7 @@ export function useAuth() {
   const error = useAuthStore(selectAuthError);
 
   const login = useAuthStore((s) => s.login);
+  const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
   const register = useAuthStore((s) => s.register);
   const verifyEmail = useAuthStore((s) => s.verifyEmail);
   const logout = useAuthStore((s) => s.logout);
@@ -34,6 +35,7 @@ export function useAuth() {
     isInitialized,
     error,
     login,
+    loginWithGoogle,
     register,
     verifyEmail,
     logout,

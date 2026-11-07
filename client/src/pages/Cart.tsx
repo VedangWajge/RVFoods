@@ -2,6 +2,7 @@ import { useState, useEffect, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { useCart } from "@/hooks/useCart";
+import { useAuth } from "@/hooks/useAuth";
 import { useUIStore } from "@/store/uiStore";
 import { orderService } from "@/services/orderService";
 import { deliveryService } from "@/services/deliveryService";
@@ -59,6 +60,7 @@ export default function Cart() {
     clearCart,
   } = useCart();
 
+  const { user } = useAuth();
   const showToast = useUIStore((s) => s.showToast);
   const [promoInput, setPromoInput] = useState("");
   const [isSubmittingWhatsApp, setIsSubmittingWhatsApp] = useState(false);
@@ -73,6 +75,7 @@ export default function Cart() {
   const [isQuoting, setIsQuoting] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [quoteRequestId, setQuoteRequestId] = useState(0);
+  const [showAddressHint, setShowAddressHint] = useState(false);
 
   // The total the server recorded, shown again when the customer comes back from WhatsApp
   const [recordedTotal, setRecordedTotal] = useState<number | null>(() => {
@@ -166,12 +169,39 @@ export default function Cart() {
   const deliveryCharge = quote?.deliveryCharge ?? null;
   const displayDiscount = quote?.discount ?? summary.discount;
   const displayTotal = quote?.finalAmount ?? summary.total;
-  const hasDeliveryDetails =
-    customerName.trim().length >= 2 &&
-    addressLine.trim().length >= 3 &&
-    /^\d{6}$/.test(pincode);
-  const canPlaceOrder =
-    hasDeliveryDetails && deliveryCharge !== null && !isQuoting && !isSubmittingWhatsApp;
+  // A signed-in customer's name comes from their profile; a guest's is optional.
+  const orderName = user?.name || customerName.trim();
+  const orderPincode = /^\d{6}$/.test(pincode) ? pincode : undefined;
+  const deliverToText = [addressLine.trim(), selectedPlace?.formatted, orderPincode]
+    .filter(Boolean)
+    .join(", ");
+
+  const goToAddress = () => {
+    const field =
+      document.getElementById("delivery-search") ?? document.getElementById("delivery-details");
+    field?.scrollIntoView({ behavior: "smooth", block: "center" });
+    field?.focus({ preventScroll: true });
+  };
+
+  // The order buttons always respond: if something is missing, this says what to do next.
+  const checkReadyToOrder = (): boolean => {
+    if (!selectedPlace || !confirmedLocation) {
+      setShowAddressHint(true);
+      showToast("Please enter your delivery address to see the delivery charge.", "info");
+      goToAddress();
+      return false;
+    }
+    if (isQuoting) {
+      showToast("Just a moment, we're working out your delivery charge.", "info");
+      return false;
+    }
+    if (deliveryCharge === null) {
+      showToast(quoteError || "Please choose another delivery address.", "error");
+      goToAddress();
+      return false;
+    }
+    return true;
+  };
 
   // For addresses we can't price online: no order is recorded, they just message us
   const handleMessageForQuote = () => {
@@ -179,13 +209,10 @@ export default function Cart() {
     const itemsText = items
       .map((item) => `- ${getCartItemLabel(item)} x${item.quantity}`)
       .join("\n");
-    const deliverTo = [addressLine.trim(), selectedPlace?.formatted, pincode]
-      .filter(Boolean)
-      .join(", ");
     const message = `Hi RV Foods! 🙏 Please share a delivery quote for:\n${itemsText}${
-      deliverTo ? `\n\nDeliver to: ${deliverTo}` : ""
+      deliverToText ? `\n\nDeliver to: ${deliverToText}` : ""
     }${confirmedLocation ? `\nMap pin: ${mapLink(confirmedLocation)}` : ""}${
-      customerName.trim() ? `\nName: ${customerName.trim()}` : ""
+      orderName ? `\nName: ${orderName}` : ""
     }`;
     window.open(
       `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`,
@@ -195,15 +222,8 @@ export default function Cart() {
   };
 
   const handleWhatsAppOrder = async () => {
-    if (
-      !canPlaceOrder ||
-      !selectedPlace ||
-      !confirmedLocation ||
-      deliveryCharge === null ||
-      items.length === 0
-    ) {
-      return;
-    }
+    if (isSubmittingWhatsApp || items.length === 0 || !checkReadyToOrder()) return;
+    if (!selectedPlace || !confirmedLocation || deliveryCharge === null) return;
     setIsSubmittingWhatsApp(true);
 
     // Synchronously open a blank tab during the user click to prevent popup blockers after await
@@ -219,12 +239,12 @@ export default function Cart() {
         })),
         promoCode: promoCode || undefined,
         attemptId: activeAttemptId || undefined,
-        customerName: customerName.trim(),
-        addressLine: addressLine.trim(),
+        customerName: orderName || undefined,
+        addressLine: addressLine.trim() || undefined,
         formattedAddress: selectedPlace.formatted,
         city: selectedPlace.city,
         state: selectedPlace.state,
-        pincode,
+        pincode: orderPincode,
         location: confirmedLocation,
         expectedDeliveryCharge: deliveryCharge,
       });
@@ -250,7 +270,7 @@ export default function Cart() {
         .join("\n");
       const deliveryText =
         response.data.deliveryCharge === 0 ? "FREE" : `₹${response.data.deliveryCharge}`;
-      const message = `Hi RV Foods! 🙏 I'd like to order:\nOrder Ref: ${orderRef}\nName: ${customerName.trim()}\nDeliver to: ${addressLine.trim()}, ${selectedPlace.formatted}, ${pincode}\nMap pin: ${mapLink(confirmedLocation)}\n\n${itemsText}\n\nApprox. delivery charge: ${deliveryText}\nTotal: ₹${response.data.finalAmount}\n\nPlease share payment details.`;
+      const message = `Hi RV Foods! 🙏 I'd like to order:\nOrder Ref: ${orderRef}${orderName ? `\nName: ${orderName}` : ""}\nDeliver to: ${deliverToText}\nMap pin: ${mapLink(confirmedLocation)}\n\n${itemsText}\n\nApprox. delivery charge: ${deliveryText}\nTotal: ₹${response.data.finalAmount}\n\nPlease share payment details.`;
       const encodedMessage = encodeURIComponent(message);
       const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
 
@@ -627,6 +647,7 @@ export default function Cart() {
               {/* Right Column: Delivery, Order Summary & Coupon */}
               <div className="lg:col-span-4 space-y-6">
                 <DeliveryAddressForm
+                  showNameField={!user}
                   customerName={customerName}
                   onCustomerNameChange={setCustomerName}
                   addressLine={addressLine}
@@ -635,8 +656,8 @@ export default function Cart() {
                   onPincodeChange={setPincode}
                   selectedPlace={selectedPlace}
                   onSelectPlace={setSelectedPlace}
-                  isLocationConfirmed={confirmedLocation !== null}
-                  onConfirmLocation={setConfirmedLocation}
+                  onLocationChange={setConfirmedLocation}
+                  showAddressHint={showAddressHint && !selectedPlace}
                   onMessageUs={handleMessageForQuote}
                 />
 
@@ -711,27 +732,34 @@ export default function Cart() {
 
                     <div className="flex justify-between text-sm text-text-secondary">
                       <span>Approx. delivery charge</span>
-                      <span className={`font-semibold ${deliveryCharge === 0 ? "text-success" : "text-text-primary"}`}>
-                        {isQuoting
-                          ? "Calculating..."
-                          : isOutOfRange || quoteError
-                          ? "Not available"
-                          : deliveryCharge === null
-                          ? selectedPlace
-                            ? "Confirm location"
-                            : "Enter address"
-                          : deliveryCharge === 0
-                          ? "FREE"
-                          : formatCurrency(deliveryCharge)}
-                      </span>
+                      {!selectedPlace ? (
+                        <button
+                          type="button"
+                          onClick={goToAddress}
+                          className="font-semibold text-primary hover:underline"
+                        >
+                          Add address
+                        </button>
+                      ) : (
+                        <span className={`font-semibold ${deliveryCharge === 0 ? "text-success" : "text-text-primary"}`}>
+                          {isQuoting
+                            ? "Calculating..."
+                            : isOutOfRange || quoteError
+                            ? "Not available"
+                            : deliveryCharge === 0
+                            ? "FREE"
+                            : formatCurrency(deliveryCharge ?? 0)}
+                        </span>
+                      )}
                     </div>
 
                     {deliveryCharge !== null && deliveryCharge > 0 && !isQuoting && (
                       <p className="text-xs text-text-secondary">
-                        Estimated delivery: {formatCurrency(deliveryCharge)}
-                        {quote?.status === "calculated" && quote.distanceKm !== null && ` (about ${quote.distanceKm} km by road)`}
-                        {quote?.status === "fallback" && " (flat rate, as we couldn't check the distance just now)"}
-                        . This is an estimate.
+                        {quote?.status === "fallback"
+                          ? "An estimated flat rate, as we couldn't check the distance just now."
+                          : quote?.distanceKm !== null && quote?.distanceKm !== undefined
+                          ? `Estimated for about ${quote.distanceKm} km by road.`
+                          : "This is an estimate."}
                       </p>
                     )}
 
@@ -762,7 +790,7 @@ export default function Cart() {
                       <button
                         type="button"
                         onClick={handleWhatsAppOrder}
-                        disabled={!canPlaceOrder}
+                        disabled={isSubmittingWhatsApp}
                         className="w-full bg-[#25D366] text-white hover:bg-[#1ebe57] disabled:opacity-60 disabled:cursor-not-allowed rounded-lg px-6 py-2.5 font-medium flex items-center justify-center gap-2 transition-colors duration-200"
                       >
                         {isSubmittingWhatsApp ? (
@@ -780,16 +808,17 @@ export default function Cart() {
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() => useUIStore.getState().openUPIModal()}
-                        disabled={!canPlaceOrder}
+                        onClick={() => {
+                          if (checkReadyToOrder()) useUIStore.getState().openUPIModal();
+                        }}
                         className="w-full h-11 text-sm font-semibold border-border bg-white"
                       >
                         <QrCode className="w-4 h-4 mr-2" /> Pay via UPI QR
                       </Button>
-                      <p className="text-[10px] text-text-secondary text-center mt-3">
-                        {canPlaceOrder || isQuoting || isSubmittingWhatsApp
+                      <p className="text-[11px] text-text-secondary text-center mt-3">
+                        {selectedPlace
                           ? "You'll be redirected to WhatsApp to confirm your order"
-                          : "Fill in your delivery details above to continue"}
+                          : "Add your address above to see your delivery charge"}
                       </p>
                     </div>
                   )}

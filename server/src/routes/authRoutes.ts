@@ -8,8 +8,7 @@ import {
   resendOtp,
   forgotPassword,
   resetPassword,
-  googleAuth,
-  googleCallback,
+  googleLogin,
   getMe,
 } from "../controllers/authController.js";
 import { protect } from "../middleware/authMiddleware.js";
@@ -21,6 +20,7 @@ import {
   resendOtpSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  googleLoginSchema,
 } from "../validators/authSchemas.js";
 
 const router = Router();
@@ -33,8 +33,7 @@ router.post("/verify-email", validate(verifyEmailSchema), verifyEmail);
 router.post("/resend-otp", validate(resendOtpSchema), resendOtp);
 router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
 router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
-router.get("/google", googleAuth);
-router.get("/google/callback", googleCallback);
+router.post("/google", validate(googleLoginSchema), googleLogin);
 router.get("/me", protect, getMe);
 
 export default router;

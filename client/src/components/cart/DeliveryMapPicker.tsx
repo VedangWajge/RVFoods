@@ -1,26 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, MapPin } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { MapPin } from "lucide-react";
 import { loadGoogleMaps } from "@/utils/googleMaps";
 import type { DeliveryLocation } from "@/types/order.types";
 
 interface DeliveryMapPickerProps {
   center: DeliveryLocation;
-  isConfirmed: boolean;
-  onConfirm: (location: DeliveryLocation | null) => void;
+  onLocationChange: (location: DeliveryLocation) => void;
 }
 
 /**
- * The pin stays in the middle and the customer moves the map under it. Quoting only
- * happens on "Confirm", so moving the map around doesn't use up route lookups.
+ * The pin stays in the middle and the customer moves the map under it. The charge updates
+ * when they let go, so it uses one route lookup per move rather than one while dragging.
  */
-export default function DeliveryMapPicker({
-  center,
-  isConfirmed,
-  onConfirm,
-}: DeliveryMapPickerProps) {
+export default function DeliveryMapPicker({ center, onLocationChange }: DeliveryMapPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
   const [mapFailed, setMapFailed] = useState(false);
 
   useEffect(() => {
@@ -40,8 +33,10 @@ export default function DeliveryMapPicker({
         clickableIcons: false,
         gestureHandling: "greedy",
       });
-      mapRef.current = map;
-      dragListener = map.addListener("dragstart", () => onConfirm(null));
+      dragListener = map.addListener("dragend", () => {
+        const position = map.getCenter();
+        if (position) onLocationChange({ lat: position.lat(), lng: position.lng() });
+      });
     };
 
     showMap().catch((err) => {
@@ -55,49 +50,26 @@ export default function DeliveryMapPicker({
     };
     // Only a new search result recentres the map, not re-renders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center.lat, center.lng, onConfirm]);
+  }, [center.lat, center.lng, onLocationChange]);
 
-  const handleConfirm = () => {
-    const position = mapRef.current?.getCenter();
-    // Without the map, the search result is the best location we have.
-    onConfirm(position ? { lat: position.lat(), lng: position.lng() } : center);
-  };
+  if (mapFailed) {
+    return (
+      <p className="text-xs text-text-secondary">
+        The map couldn't load, but your address is saved. You can order as normal.
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-2">
-      {mapFailed ? (
-        <p className="text-xs text-error">
-          The map couldn't load. You can confirm the location you searched for.
-        </p>
-      ) : (
-        <>
-          <p className="text-xs text-text-secondary">
-            Move the map so the pin is on your gate.
-          </p>
-          <div className="relative h-56 rounded-xl overflow-hidden border border-border">
-            <div ref={containerRef} className="absolute inset-0" />
-            <MapPin
-              className="absolute left-1/2 top-1/2 w-8 h-8 -translate-x-1/2 -translate-y-full text-primary fill-white pointer-events-none"
-              aria-hidden
-            />
-          </div>
-        </>
-      )}
-
-      {isConfirmed ? (
-        <p className="text-xs font-semibold text-success flex items-center gap-1.5">
-          <CheckCircle2 className="w-4 h-4" /> Location confirmed
-        </p>
-      ) : (
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleConfirm}
-          className="w-full h-10 text-sm font-semibold border-border bg-white"
-        >
-          Confirm this location
-        </Button>
-      )}
+      <p className="text-xs text-text-secondary">Move the map so the pin is on your gate.</p>
+      <div className="relative h-56 rounded-xl overflow-hidden border border-border">
+        <div ref={containerRef} className="absolute inset-0" />
+        <MapPin
+          className="absolute left-1/2 top-1/2 w-8 h-8 -translate-x-1/2 -translate-y-full text-primary fill-white pointer-events-none"
+          aria-hidden
+        />
+      </div>
     </div>
   );
 }

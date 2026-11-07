@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff } from "lucide-react";
-import GoogleIcon from "@/components/common/GoogleIcon";
+import GoogleSignInButton from "@/components/common/GoogleSignInButton";
 import AuthCard from "@/components/common/AuthCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,18 +25,20 @@ type Step = "register" | "verify";
 
 export default function Register() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { register: registerUser, verifyEmail, isLoading, isAuthenticated } =
     useAuth();
   const showToast = useUIStore((s) => s.showToast);
 
   const [step, setStep] = useState<Step>("register");
   const [registeredEmail, setRegisteredEmail] = useState("");
-  const [devOtpHint, setDevOtpHint] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const registerForm = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
+    // Filled in when the login page sends a new customer here
+    defaultValues: { email: (location.state as { email?: string } | null)?.email ?? "" },
   });
 
   const otpForm = useForm<VerifyOtpFormValues>({
@@ -61,7 +63,6 @@ export default function Register() {
 
       setRegisteredEmail(result.email);
       otpForm.setValue("email", result.email);
-      setDevOtpHint(result.devOtp ?? null);
       setStep("verify");
       showToast("Check your email for the verification code.", "success");
     } catch (error) {
@@ -85,19 +86,11 @@ export default function Register() {
   const handleResendOtp = async () => {
     if (!registeredEmail) return;
     try {
-      const response = await authService.resendOtp(registeredEmail);
-      if (response.data?.devOtp) {
-        setDevOtpHint(response.data.devOtp);
-      }
+      await authService.resendOtp(registeredEmail);
       showToast("A new verification code has been sent.", "success");
     } catch (error) {
       showToast(getErrorMessage(error), "error");
     }
-  };
-
-  const handleGoogleSignup = () => {
-    // TODO: Configure Google OAuth on server
-    showToast("Google sign-up is not configured yet.", "info");
   };
 
   return (
@@ -124,24 +117,7 @@ export default function Register() {
       >
         {step === "register" ? (
           <>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full gap-2"
-              onClick={handleGoogleSignup}
-            >
-              <GoogleIcon className="h-4 w-4" />
-              Sign up with Google
-            </Button>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-surface px-2 text-text-muted">Or with email</span>
-              </div>
-            </div>
+            <GoogleSignInButton text="signup_with" />
 
             <form
               onSubmit={registerForm.handleSubmit(onRegisterSubmit)}
@@ -268,12 +244,6 @@ export default function Register() {
             className="space-y-4"
             noValidate
           >
-            {devOtpHint && (
-              <p className="rounded-lg bg-accent/20 px-3 py-2 text-sm text-text-secondary">
-                Dev mode OTP: <strong className="text-primary">{devOtpHint}</strong>
-              </p>
-            )}
-
             <div className="space-y-2">
               <Label htmlFor="otp">6-digit verification code</Label>
               <Input

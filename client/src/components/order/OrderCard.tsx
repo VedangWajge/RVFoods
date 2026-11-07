@@ -169,7 +169,7 @@ export default function OrderCard({ order }: OrderCardProps) {
                   </span>
                   <p className="text-xs text-text-primary leading-relaxed">
                     {order.shippingAddress.street},<br />
-                    {order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.pincode},<br />
+                    {order.shippingAddress.city}, {order.shippingAddress.state}{order.shippingAddress.pincode ? ` - ${order.shippingAddress.pincode}` : ""},<br />
                     {order.shippingAddress.country}
                   </p>
                   {order.deliveryChargeSource && (

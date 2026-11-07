@@ -24,6 +24,8 @@ app.set("trust proxy", 1);
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
+  "https://rv-foods.in",
+  "https://www.rv-foods.in",
   "https://rv-foods.vercel.app",
   "https://rv-foods.onrender.com"
 ];

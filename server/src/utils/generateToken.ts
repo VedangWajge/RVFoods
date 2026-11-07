@@ -79,12 +79,23 @@ export const hashToken = (token: string): string => {
   return crypto.createHash("sha256").update(token).digest("hex");
 };
 
-export const REFRESH_COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
-  maxAge: REFRESH_COOKIE_MAX_AGE,
-  path: "/api/auth",
+/**
+ * The site can still be reached on its onrender.com address, which browsers treat as a
+ * separate site from the API. Only SameSite=None lets the cookie reach the API from there,
+ * and browsers require Secure with it. On rv-foods.in and api.rv-foods.in the cookie is
+ * same-site. CORS still limits which sites can read the response.
+ */
+export const getRefreshCookieOptions = (nodeEnv = process.env.NODE_ENV) => {
+  const isProduction = nodeEnv === "production";
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? ("none" as const) : ("lax" as const),
+    maxAge: REFRESH_COOKIE_MAX_AGE,
+    path: "/api/auth",
+  };
 };
+
+export const REFRESH_COOKIE_OPTIONS = getRefreshCookieOptions();
 
 export const REFRESH_COOKIE_NAME = "refreshToken";

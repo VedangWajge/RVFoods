@@ -130,9 +130,9 @@ export default function Footer() {
             © 2024 RV Foods & Snacks · Made with 🧡 in Mumbai
           </p>
           <div className="flex gap-6">
-            <Link to="/about" className="hover:text-white transition-colors">
+            <a href="/privacy-policy.html" className="hover:text-white transition-colors">
               Privacy Policy
-            </Link>
+            </a>
             <Link to="/contact" className="hover:text-white transition-colors">
               Terms
             </Link>

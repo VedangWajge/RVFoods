@@ -14,6 +14,7 @@ import {
   sendVerificationOtpEmail,
   sendPasswordResetEmail,
 } from "../utils/sendEmail.js";
+import { verifyGoogleCredential } from "../utils/googleAuth.js";
 import { AppError, asyncHandler } from "../middleware/errorHandler.js";
 import type { AuthRequest } from "../middleware/authMiddleware.js";
 
@@ -27,9 +28,8 @@ const normalizeEmail = (email: string): string => email.toLowerCase().trim();
 
 const normalizeOtp = (otp: string): string => otp.trim().replace(/\s/g, "");
 
-const shouldIncludeDevOtp = (emailSent: boolean): boolean =>
-  process.env.NODE_ENV === "development" &&
-  (!process.env.RESEND_API_KEY?.trim() || !emailSent);
+const EMAIL_NOT_SENT_MESSAGE =
+  "We couldn't send the verification email. Please check your email address and try again, or sign up with Google.";
 
 const saveEmailOtp = async (
   userId: IUser["_id"],
@@ -63,12 +63,8 @@ const setRefreshTokenCookie = (res: Response, token: string): void => {
 };
 
 const clearRefreshTokenCookie = (res: Response): void => {
-  res.clearCookie(REFRESH_COOKIE_NAME, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/api/auth",
-  });
+  const { httpOnly, secure, sameSite, path } = REFRESH_COOKIE_OPTIONS;
+  res.clearCookie(REFRESH_COOKIE_NAME, { httpOnly, secure, sameSite, path });
 };
 
 const issueAuthTokens = async (
@@ -128,8 +124,9 @@ export const register = asyncHandler(async (req, res) => {
 
   const emailSent = await sendVerificationOtpEmail(email, name, otp);
 
-  if (process.env.NODE_ENV === "development") {
-    console.log(`[Dev OTP] ${email} → ${otp}`);
+  if (!emailSent) {
+    sendError(res, EMAIL_NOT_SENT_MESSAGE, 422);
+    return;
   }
 
   const refreshed = await User.findById(user._id);
@@ -140,13 +137,8 @@ export const register = asyncHandler(async (req, res) => {
 
   sendSuccess(
     res,
-    emailSent
-      ? "Registration successful. Please verify your email with the OTP sent."
-      : "Registration successful. Use the verification code shown below (email not configured).",
-    {
-      user: toPublicUser(refreshed),
-      ...(shouldIncludeDevOtp(emailSent) ? { devOtp: otp } : {}),
-    },
+    "Registration successful. Please verify your email with the OTP sent.",
+    { user: toPublicUser(refreshed) },
     existing ? 200 : 201
   );
 });
@@ -174,13 +166,12 @@ export const resendOtp = asyncHandler(async (req, res) => {
 
   const emailSent = await sendVerificationOtpEmail(email, user.name, otp);
 
-  if (process.env.NODE_ENV === "development") {
-    console.log(`[Dev OTP resent] ${email} → ${otp}`);
+  if (!emailSent) {
+    sendError(res, EMAIL_NOT_SENT_MESSAGE, 422);
+    return;
   }
 
-  sendSuccess(res, "Verification code sent", {
-    ...(shouldIncludeDevOtp(emailSent) ? { devOtp: otp } : {}),
-  });
+  sendSuccess(res, "Verification code sent");
 });
 
 /** POST /api/auth/login */
@@ -190,8 +181,14 @@ export const login = asyncHandler(async (req, res) => {
 
   const user = await User.findOne({ email }).select("+password +refreshToken");
 
-  if (!user || !user.password) {
-    sendError(res, "Invalid email or password", 401);
+  // The client sends new customers to the register page on this code.
+  if (!user) {
+    sendError(res, "No account found with this email", 404, "ACCOUNT_NOT_FOUND");
+    return;
+  }
+
+  if (!user.password) {
+    sendError(res, "This account uses Google sign-in. Please continue with Google.", 401);
     return;
   }
 
@@ -301,9 +298,6 @@ export const verifyEmail = asyncHandler(async (req, res) => {
 
   const otpHash = hashToken(otp);
   if (user.emailOtpHash !== otpHash) {
-    if (process.env.NODE_ENV === "development") {
-      console.warn(`[OTP mismatch] email=${email} submitted=${otp}`);
-    }
     sendError(res, "Invalid OTP. Please check the code and try again.", 400);
     return;
   }
@@ -374,17 +368,51 @@ export const resetPassword = asyncHandler(async (req, res) => {
   sendSuccess(res, "Password reset successful. Please log in.");
 });
 
-/** GET /api/auth/google */
-export const googleAuth = asyncHandler(async (_req, _res) => {
-  throw new AppError(
-    "Google OAuth is not configured yet. Set up Google credentials in server/.env",
-    501
-  );
-});
+/** POST /api/auth/google: signs in with Google, creating the account if needed */
+export const googleLogin = asyncHandler(async (req, res) => {
+  const profile = await verifyGoogleCredential(req.body.credential as string);
 
-/** GET /api/auth/google/callback */
-export const googleCallback = asyncHandler(async (_req, _res) => {
-  throw new AppError("Google OAuth callback is not configured yet", 501);
+  let user = await User.findOne({ googleId: profile.googleId });
+
+  if (!user) {
+    user = await User.findOne(
+      { email: profile.email },
+      "+password +emailOtpHash +emailOtpExpires +passwordResetTokenHash +passwordResetExpires"
+    );
+
+    if (user?.googleId) {
+      throw new AppError(
+        "This email is already linked to a different Google account.",
+        409
+      );
+    }
+
+    if (user) {
+      // An unverified account's password was set by someone who never proved they own
+      // this email. Google just proved it, so that person must not keep access.
+      if (!user.isVerified) {
+        user.password = undefined;
+        user.emailOtpHash = undefined;
+        user.emailOtpExpires = undefined;
+        user.passwordResetTokenHash = undefined;
+        user.passwordResetExpires = undefined;
+      }
+      user.googleId = profile.googleId;
+      user.isVerified = true;
+      await user.save({ validateBeforeSave: false });
+    } else {
+      user = await User.create({
+        name: profile.name,
+        email: profile.email,
+        googleId: profile.googleId,
+        isVerified: true,
+      });
+    }
+  }
+
+  const tokens = await issueAuthTokens(user, res);
+
+  sendSuccess(res, "Login successful", tokens);
 });
 
 /** GET /api/auth/me — current user (protected) */

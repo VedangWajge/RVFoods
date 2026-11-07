@@ -63,16 +63,12 @@ export const whatsappOrderAttemptSchema = z.object({
     .array(orderProductItemSchema)
     .min(1, "Order must contain at least one product"),
   promoCode: z.string().optional(),
-  customerName: z.string().trim().min(2, "Please enter your name").max(80),
-  addressLine: z
-    .string()
-    .trim()
-    .min(3, "Please enter your flat, building and road")
-    .max(200),
+  customerName: z.string().trim().max(80).optional(),
+  addressLine: z.string().trim().max(200).optional(),
   formattedAddress: z.string().trim().min(3, "Please select your address").max(300),
   city: z.string().trim().max(100).optional(),
   state: z.string().trim().max(100).optional(),
-  pincode: z.string().regex(/^\d{6}$/, "Please enter your 6-digit PIN code"),
+  pincode: z.string().regex(/^\d{6}$/, "Please enter a valid 6-digit PIN code").optional(),
   location: deliveryLocationSchema,
   // Only compared with the server's own figure, never used as the price.
   expectedDeliveryCharge: z.number().min(0),

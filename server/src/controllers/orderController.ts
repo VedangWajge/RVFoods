@@ -65,16 +65,17 @@ export const createWhatsAppOrderAttempt = asyncHandler(
     const deliveryCharge = quote.deliveryCharge;
     const finalAmount = Math.max(0, subtotal - safeDiscount + deliveryCharge);
     const deliveryDetails = {
-      customerName,
+      // Only the address is required: a signed-in customer's name comes from their profile.
+      customerName: customerName || req.user?.name,
       deliveryCharge,
       deliveryChargeSource: quote.status as DeliveryChargeSource,
       deliveryDistanceKm: quote.distanceKm ?? undefined,
       deliveryLocation: location,
       shippingAddress: {
-        street: `${addressLine}, ${formattedAddress}`,
+        street: addressLine ? `${addressLine}, ${formattedAddress}` : formattedAddress,
         city: city || "Mumbai",
         state: state || "Maharashtra",
-        pincode,
+        pincode: pincode ?? "",
         country: "India",
       },
     };

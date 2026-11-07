@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
+import axios from "axios";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff } from "lucide-react";
-import GoogleIcon from "@/components/common/GoogleIcon";
+import GoogleSignInButton from "@/components/common/GoogleSignInButton";
 import AuthCard from "@/components/common/AuthCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,8 +50,13 @@ export default function Login() {
       await login(values);
       showToast("Welcome back!", "success");
       navigate(from, { replace: true });
-    } catch {
-      showToast("Login failed. Check your credentials.", "error");
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.data?.error === "ACCOUNT_NOT_FOUND") {
+        showToast("Looks like you're new here. Let's create your account.", "info");
+        navigate("/register", { state: { email: values.email } });
+        return;
+      }
+      showToast(getErrorMessage(error), "error");
     }
   };
 
@@ -67,11 +73,6 @@ export default function Login() {
     } finally {
       setForgotLoading(false);
     }
-  };
-
-  const handleGoogleLogin = () => {
-    // TODO: Configure Google OAuth on server (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
-    showToast("Google sign-in is not configured yet.", "info");
   };
 
   return (
@@ -92,24 +93,7 @@ export default function Login() {
           </p>
         }
       >
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full gap-2"
-          onClick={handleGoogleLogin}
-        >
-          <GoogleIcon className="h-4 w-4" />
-          Continue with Google
-        </Button>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-border" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-surface px-2 text-text-muted">Or with email</span>
-          </div>
-        </div>
+        <GoogleSignInButton text="continue_with" />
 
         {showForgot ? (
           <form onSubmit={handleForgotPassword} className="space-y-4">
