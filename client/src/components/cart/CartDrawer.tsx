@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { ShoppingBag, ArrowRight, X } from "lucide-react";
+import { ShoppingBag, ArrowRight } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { useUIStore } from "@/store/uiStore";
 import { formatCurrency } from "@/utils/formatCurrency";
@@ -38,13 +38,6 @@ export default function CartDrawer() {
               </span>
             </SheetTitle>
           </SheetHeader>
-          <button
-            onClick={closeCartDrawer}
-            className="text-text-secondary hover:text-text-primary p-1.5 hover:bg-background rounded-lg transition-colors"
-            aria-label="Close cart drawer"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* Cart Contents */}
