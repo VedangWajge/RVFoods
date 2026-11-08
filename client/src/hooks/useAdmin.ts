@@ -152,6 +152,29 @@ export function useAdmin() {
     }
   }, [stats, fetchStats]);
 
+  const deleteOrder = useCallback(async (orderId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await adminService.deleteOrder(orderId);
+      if (response.success) {
+        setOrders((prev) => prev.filter((o) => o._id !== orderId && o.orderId !== orderId));
+        if (stats) {
+          fetchStats();
+        }
+        return true;
+      } else {
+        setError(response.message || "Failed to delete order");
+        return false;
+      }
+    } catch (err) {
+      setError(getErrorMessage(err));
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [stats, fetchStats]);
+
   return {
     stats,
     users,
@@ -166,5 +189,6 @@ export function useAdmin() {
     updateUser,
     updateOrderStatus,
     updateOrderPaymentStatus,
+    deleteOrder,
   };
 }

@@ -4,6 +4,7 @@ import { Helmet } from "react-helmet-async";
 import { motion } from "framer-motion";
 import { useProducts } from "@/hooks/useProducts";
 import ProductGrid from "@/components/product/ProductGrid";
+import FestiveBanner from "@/components/common/FestiveBanner";
 import { BRAND } from "@/utils/constants";
 import { Home as HomeIcon, Leaf, Truck, MessageCircle, ArrowRight, Sparkles, Star } from "lucide-react";
 import Loader from "@/components/common/Loader";
@@ -28,6 +29,9 @@ export default function Home() {
           content="Taste the crunch, feel the freshness. Buy authentic Maharashtrian homemade masale, pure cow ghee, and traditional sweets crafted by a Mumbai homemaker."
         />
       </Helmet>
+
+      {/* Dynamic Festive Offer Banner (Toggled by admin) */}
+      <FestiveBanner />
 
       {/* Thin Festive Announcement Banner */}
       <div className="bg-primary text-white text-center text-xs py-1.5 px-4 font-medium tracking-wide select-none">

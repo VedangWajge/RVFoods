@@ -6,6 +6,7 @@ import {
   updateOrderPaymentStatus,
   createWhatsAppOrderAttempt,
   confirmWhatsAppOrder,
+  deleteOrder,
 } from "../controllers/orderController.js";
 import { protect, optionalAuth } from "../middleware/authMiddleware.js";
 import { adminOnly } from "../middleware/adminMiddleware.js";
@@ -29,5 +30,8 @@ router.put("/:id/status", adminOnly, updateOrderStatus);
 
 // Admin-only order payment status update
 router.put("/:id/payment-status", adminOnly, updateOrderPaymentStatus);
+
+// Admin-only delete order
+router.delete("/:id", adminOnly, deleteOrder);
 
 export default router;

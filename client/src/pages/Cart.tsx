@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUIStore } from "@/store/uiStore";
 import { orderService } from "@/services/orderService";
 import { deliveryService } from "@/services/deliveryService";
+import { offerService } from "@/services/offerService";
 import { getErrorMessage } from "@/services/api";
 import { formatCurrency } from "@/utils/formatCurrency";
 import { getCartItemLabel, getCartLineId } from "@/utils/cartHelpers";
@@ -15,6 +16,7 @@ import type {
   DeliveryQuote,
   SelectedDeliveryPlace,
 } from "@/types/order.types";
+import type { FestiveOffer } from "@/types/offer.types";
 import {
   Trash2,
   Plus,
@@ -92,6 +94,16 @@ export default function Cart() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
 
+  // Active festive offer data
+  const [activeOffer, setActiveOffer] = useState<FestiveOffer | null>(null);
+
+  useEffect(() => {
+    offerService
+      .getOffer()
+      .then(setActiveOffer)
+      .catch(() => {});
+  }, []);
+
   // Confirmed order state for celebratory screen
   const [confirmedOrder, setConfirmedOrder] = useState<{
     orderId: string;
@@ -167,8 +179,29 @@ export default function Cart() {
 
   const isOutOfRange = quote?.status === "out_of_range";
   const deliveryCharge = quote?.deliveryCharge ?? null;
-  const displayDiscount = quote?.discount ?? summary.discount;
-  const displayTotal = quote?.finalAmount ?? summary.total;
+
+  // Fallback festive offer discount when user hasn't selected an address yet
+  const fallbackOfferDiscount =
+    !quote && activeOffer?.active && summary.subtotal > 0
+      ? Math.min(
+          summary.subtotal,
+          Math.round((summary.subtotal * activeOffer.discountPercent) / 100)
+        )
+      : 0;
+
+  const displayDiscount = quote
+    ? quote.discount
+    : Math.max(summary.discount, fallbackOfferDiscount);
+
+  const displayTotal =
+    quote?.finalAmount ?? Math.max(0, summary.subtotal - displayDiscount);
+
+  const isOfferApplied = quote
+    ? (quote.offerDiscount ?? 0) > 0
+    : fallbackOfferDiscount > 0 && fallbackOfferDiscount >= summary.discount;
+
+  const appliedOfferTitle = quote?.offerTitle || activeOffer?.title || "Festive Offer";
+  const appliedOfferPercent = quote?.offerPercent || activeOffer?.discountPercent || 50;
   // A signed-in customer's name comes from their profile; a guest's is optional.
   const orderName = user?.name || customerName.trim();
   const orderPincode = /^\d{6}$/.test(pincode) ? pincode : undefined;
@@ -270,7 +303,17 @@ export default function Cart() {
         .join("\n");
       const deliveryText =
         response.data.deliveryCharge === 0 ? "FREE" : `₹${response.data.deliveryCharge}`;
-      const message = `Hi RV Foods! 🙏 I'd like to order:\nOrder Ref: ${orderRef}${orderName ? `\nName: ${orderName}` : ""}\nDeliver to: ${deliverToText}\nMap pin: ${mapLink(confirmedLocation)}\n\n${itemsText}\n\nApprox. delivery charge: ${deliveryText}\nTotal: ₹${response.data.finalAmount}\n\nPlease share payment details.`;
+
+      const offerDisc = response.data.offerDiscount || 0;
+      const totalDisc = response.data.discount || 0;
+      let discountLine = "";
+      if (offerDisc > 0) {
+        discountLine = `\n🪔 Festive Offer (${response.data.offerTitle || "Diwali Offer"}): -₹${offerDisc}`;
+      } else if (totalDisc > 0) {
+        discountLine = `\nDiscount: -₹${totalDisc}`;
+      }
+
+      const message = `Hi RV Foods! 🙏 I'd like to order:\nOrder Ref: ${orderRef}${orderName ? `\nName: ${orderName}` : ""}\nDeliver to: ${deliverToText}\nMap pin: ${mapLink(confirmedLocation)}\n\n${itemsText}\n\nSubtotal: ₹${summary.subtotal}${discountLine}\nApprox. delivery charge: ${deliveryText}\nTotal: ₹${response.data.finalAmount}\n\nPlease share payment details.`;
       const encodedMessage = encodeURIComponent(message);
       const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
 
@@ -327,10 +370,17 @@ export default function Cart() {
           orderId: orderIdToConfirm,
           finalAmount: res.data?.finalAmount ?? recordedTotal ?? displayTotal,
         });
-        showToast(
-          `Order confirmed successfully! Reference: ${orderIdToConfirm}`,
-          "success"
-        );
+        if (res.data?.offerEnded) {
+          showToast(
+            `Order confirmed! Reference: ${orderIdToConfirm}. Note: The festive offer ended as all spots were claimed, so your total was updated.`,
+            "info"
+          );
+        } else {
+          showToast(
+            `Order confirmed successfully! Reference: ${orderIdToConfirm}`,
+            "success"
+          );
+        }
       } else {
         showToast(res.message || "Failed to confirm order", "error");
       }
@@ -545,6 +595,31 @@ export default function Cart() {
                     </button>
                   </div>
                 )}
+                {/* Active Festive Offer Alert */}
+                {activeOffer?.active && (
+                  <div className="bg-gradient-to-r from-amber-500/10 via-primary/10 to-amber-500/10 border border-primary/25 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl select-none">🪔</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-primary tracking-wide uppercase">
+                            {activeOffer.title} Active
+                          </span>
+                          <Badge className="bg-primary text-white text-[10px] px-1.5 py-0 h-4">
+                            {activeOffer.discountPercent}% OFF
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-text-secondary mt-0.5">
+                          Get {activeOffer.discountPercent}% off on first {activeOffer.maxOrders} orders!{" "}
+                          <span className="font-semibold text-text-primary">
+                            Only {activeOffer.remaining} {activeOffer.remaining === 1 ? "order" : "orders"} remaining.
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Free shipping progress indicator */}
                 {!summary.qualifiesForFreeDelivery ? (
                   <div className="bg-accent-light/20 border border-accent/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
@@ -703,7 +778,15 @@ export default function Cart() {
                   {!promoCode && (
                     <div className="mt-3 p-3 bg-[#FDFAF6] border border-border/80 rounded-xl">
                       <p className="text-[11px] text-text-secondary">
-                        💡 Tip: Try code <span className="font-bold text-primary">RVFOODS10</span> to get <span className="font-bold text-primary">10% off</span> your entire order subtotal!
+                        {activeOffer?.active ? (
+                          <>
+                            🪔 <span className="font-semibold text-primary">{activeOffer.title}</span> is active! You automatically get <span className="font-bold text-primary">{activeOffer.discountPercent}% off</span> on the first {activeOffer.maxOrders} orders. Promo codes don't stack — the bigger discount wins.
+                          </>
+                        ) : (
+                          <>
+                            💡 Tip: Try code <span className="font-bold text-primary">RVFOODS10</span> to get <span className="font-bold text-primary">10% off</span> your entire order subtotal!
+                          </>
+                        )}
                       </p>
                     </div>
                   )}
@@ -724,9 +807,25 @@ export default function Cart() {
                     </div>
 
                     {displayDiscount > 0 && (
-                      <div className="flex justify-between text-sm text-success font-semibold">
-                        <span>Discount</span>
-                        <span>-{formatCurrency(displayDiscount)}</span>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-sm text-success font-semibold">
+                          <span className="flex items-center gap-1.5">
+                            {isOfferApplied ? (
+                              <>
+                                <Sparkles className="w-3.5 h-3.5 text-primary" />
+                                <span>{appliedOfferTitle} ({appliedOfferPercent}% off)</span>
+                              </>
+                            ) : (
+                              <span>Discount {promoCode ? `(${promoCode})` : ""}</span>
+                            )}
+                          </span>
+                          <span>-{formatCurrency(displayDiscount)}</span>
+                        </div>
+                        {isOfferApplied && promoCode && (
+                          <p className="text-[11px] text-text-muted">
+                            {appliedOfferTitle} ({appliedOfferPercent}% off) gives a higher discount than promo code {promoCode}.
+                          </p>
+                        )}
                       </div>
                     )}
 

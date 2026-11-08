@@ -61,4 +61,12 @@ export const adminService = {
     const { data } = await api.put<ApiResponse<Order>>(`/orders/${orderId}/payment-status`, { paymentStatus });
     return data;
   },
+
+  /**
+   * Delete an order (admin context)
+   */
+  async deleteOrder(orderId: string): Promise<ApiResponse<{ orderId: string }>> {
+    const { data } = await api.delete<ApiResponse<{ orderId: string }>>(`/orders/${orderId}`);
+    return data;
+  },
 };

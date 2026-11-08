@@ -374,3 +374,37 @@ export const updateOrderPaymentStatus = asyncHandler(
     sendSuccess(res, `Payment status updated to ${paymentStatus}`, order);
   }
 );
+
+// @desc    Delete an order (Admin only)
+// @route   DELETE /api/orders/:id
+// @access  Admin
+export const deleteOrder = asyncHandler(
+  async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const idStr = typeof id === "string" ? id : String(id);
+    const isObjId = Types.ObjectId.isValid(idStr);
+    const order = await Order.findOne({
+      $or: [
+        { orderId: idStr },
+        ...(isObjId ? [{ _id: idStr }] : []),
+      ],
+    });
+
+    if (!order) {
+      throw new AppError("Order not found", 404);
+    }
+
+    // Return inventory stock if it was deducted (website orders that are active)
+    if (order.orderStatus !== "cancelled" && order.paymentMethod !== "whatsapp") {
+      for (const item of order.products) {
+        await Product.findByIdAndUpdate(item.productId, {
+          $inc: { stock: item.quantity },
+        });
+      }
+    }
+
+    await order.deleteOne();
+
+    sendSuccess(res, "Order deleted successfully", { orderId: order.orderId });
+  }
+);

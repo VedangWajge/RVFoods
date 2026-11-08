@@ -7,6 +7,7 @@ import { DELIVERY_CONFIG } from "../src/config/delivery.js";
 import {
   confirmWhatsAppOrder,
   createWhatsAppOrderAttempt,
+  deleteOrder,
 } from "../src/controllers/orderController.js";
 import { getDeliveryQuote } from "../src/controllers/deliveryController.js";
 import { getRoadDistanceKm } from "../src/utils/deliveryDistance.js";
@@ -259,4 +260,38 @@ test("route lookup separates 'no route' from 'API down'", async () => {
 test("a missing API key counts as API down, not a crash", async () => {
   delete process.env.GOOGLE_MAPS_SERVER_KEY;
   assert.equal(await getRoadDistanceKm(location), null);
+});
+
+test("deleting an order removes it and returns its id", async () => {
+  let deleted = false;
+  mock.method(Order, "findOne", () =>
+    Promise.resolve({
+      orderId: "RVF-TEST",
+      orderStatus: "placed",
+      paymentMethod: "whatsapp",
+      products: [],
+      deleteOne() {
+        deleted = true;
+        return Promise.resolve();
+      },
+    })
+  );
+
+  const res = await new Promise<any>((resolve) => {
+    deleteOrder(
+      { params: { id: "RVF-TEST" } } as never,
+      {
+        status() {
+          return this;
+        },
+        json(payload: unknown) {
+          resolve(payload);
+        },
+      } as never,
+      ((err: unknown) => resolve({ error: err })) as never
+    );
+  });
+
+  assert.equal(deleted, true);
+  assert.equal(res?.data?.orderId, "RVF-TEST");
 });

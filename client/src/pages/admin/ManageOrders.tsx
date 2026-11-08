@@ -19,6 +19,7 @@ import {
   MessageCircle,
   Globe,
   IndianRupee,
+  Trash2,
 } from "lucide-react";
 
 const ORDER_STATUSES: { value: OrderStatus | ""; label: string }[] = [
@@ -40,7 +41,14 @@ const PAYMENT_STATUSES: { value: PaymentStatus | ""; label: string }[] = [
 ];
 
 export default function ManageOrders() {
-  const { orders, loading, fetchOrders, updateOrderStatus, updateOrderPaymentStatus } = useAdmin();
+  const {
+    orders,
+    loading,
+    fetchOrders,
+    updateOrderStatus,
+    updateOrderPaymentStatus,
+    deleteOrder,
+  } = useAdmin();
   const showToast = useUIStore((s) => s.showToast);
 
   // Active Tab state ("orders" for confirmed orders, "whatsapp_attempts" for unconfirmed attempts / WhatsApp flow)
@@ -57,6 +65,7 @@ export default function ManageOrders() {
   // Loading state per order status update
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [updatingPaymentId, setUpdatingPaymentId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchOrders();
@@ -96,6 +105,27 @@ export default function ManageOrders() {
       showToast(`Order ${customOrderId} promoted to Placed successfully!`, "success");
     } else {
       showToast("Failed to promote order", "error");
+    }
+  };
+
+  const handleDeleteOrder = async (orderId: string, customOrderId: string) => {
+    if (
+      !window.confirm(
+        `Are you sure you want to permanently delete order ${customOrderId}? This action cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setDeletingId(orderId);
+    const success = await deleteOrder(orderId);
+    setDeletingId(null);
+    if (success) {
+      showToast(`Order ${customOrderId} deleted successfully`, "success");
+      if (expandedOrderId === orderId) {
+        setExpandedOrderId(null);
+      }
+    } else {
+      showToast("Failed to delete order", "error");
     }
   };
 
@@ -328,6 +358,7 @@ export default function ManageOrders() {
                     {activeTab === "whatsapp_attempts" && (
                       <th className="px-6 py-4">Promotion Action</th>
                     )}
+                    <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -423,13 +454,29 @@ export default function ManageOrders() {
                               )}
                             </td>
                           )}
+                          <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              disabled={deletingId === order._id}
+                              onClick={() => handleDeleteOrder(order._id, order.orderId)}
+                              title={`Delete order ${order.orderId}`}
+                              className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-text-muted hover:text-error hover:bg-error/10 border border-transparent hover:border-error/20 transition-colors disabled:opacity-50"
+                              aria-label="Delete order"
+                            >
+                              {deletingId === order._id ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-error" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </button>
+                          </td>
                         </tr>
 
                         {/* Collapsible Details Row */}
                         <AnimatePresence>
                           {isExpanded && (
                             <tr className="bg-background/40">
-                              <td colSpan={activeTab === "whatsapp_attempts" ? 10 : 9} className="p-6 border-b border-border">
+                              <td colSpan={activeTab === "whatsapp_attempts" ? 11 : 10} className="p-6 border-b border-border">
                                 <motion.div
                                   initial={{ opacity: 0, height: 0 }}
                                   animate={{ opacity: 1, height: "auto" }}
@@ -655,6 +702,31 @@ export default function ManageOrders() {
                                           </select>
                                         </div>
                                       </div>
+                                    </div>
+
+                                    {/* Delete Order Action Bar */}
+                                    <div className="pt-3 border-t border-border flex items-center justify-between">
+                                      <p className="text-[11px] text-text-muted">
+                                        Permanently delete this order record from the system.
+                                      </p>
+                                      <button
+                                        type="button"
+                                        disabled={deletingId === order._id}
+                                        onClick={() => handleDeleteOrder(order._id, order.orderId)}
+                                        className="inline-flex items-center gap-1.5 text-xs text-error hover:bg-error/10 border border-error/20 px-3 py-1.5 rounded-lg font-semibold transition-colors disabled:opacity-50"
+                                      >
+                                        {deletingId === order._id ? (
+                                          <>
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                            Deleting...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                            Delete Order
+                                          </>
+                                        )}
+                                      </button>
                                     </div>
                                   </div>
                                 </motion.div>

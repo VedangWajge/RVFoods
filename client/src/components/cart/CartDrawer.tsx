@@ -1,7 +1,10 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ShoppingBag, ArrowRight } from "lucide-react";
+import { ShoppingBag, ArrowRight, Sparkles } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { useUIStore } from "@/store/uiStore";
+import { offerService } from "@/services/offerService";
+import type { FestiveOffer } from "@/types/offer.types";
 import { formatCurrency } from "@/utils/formatCurrency";
 import { getCartLineId } from "@/utils/cartHelpers";
 import CartItem from "./CartItem";
@@ -18,11 +21,32 @@ export default function CartDrawer() {
   const { items, itemCount, summary, isEmpty } = useCart();
   const isOpen = useUIStore((s) => s.isCartDrawerOpen);
   const closeCartDrawer = useUIStore((s) => s.closeCartDrawer);
+  const [offer, setOffer] = useState<FestiveOffer | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      offerService
+        .getOffer()
+        .then(setOffer)
+        .catch(() => {});
+    }
+  }, [isOpen]);
 
   const handleNavigate = (path: string) => {
     closeCartDrawer();
     navigate(path);
   };
+
+  const offerDiscount =
+    offer?.active && summary.subtotal > 0
+      ? Math.min(
+          summary.subtotal,
+          Math.round((summary.subtotal * offer.discountPercent) / 100)
+        )
+      : 0;
+
+  const effectiveDiscount = Math.max(summary.discount, offerDiscount);
+  const effectiveTotal = Math.max(0, summary.subtotal - effectiveDiscount);
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && closeCartDrawer()}>
@@ -68,15 +92,28 @@ export default function CartDrawer() {
         {/* Footer / Summary (sticky at bottom) */}
         {!isEmpty && (
           <div className="border-t border-border bg-background/50 p-6 space-y-4">
+            {offer?.active && (
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-2.5 text-xs text-primary flex items-center gap-2">
+                <Sparkles className="w-4 h-4 shrink-0" />
+                <span>
+                  <strong>{offer.title}:</strong> {offer.discountPercent}% OFF auto-applied ({offer.remaining} left)
+                </span>
+              </div>
+            )}
+
             <div className="space-y-2.5">
               <div className="flex justify-between text-xs text-text-secondary font-medium">
                 <span>Subtotal</span>
                 <span>{formatCurrency(summary.subtotal)}</span>
               </div>
-              {summary.discount > 0 && (
+              {effectiveDiscount > 0 && (
                 <div className="flex justify-between text-xs text-success font-semibold">
-                  <span>Discount</span>
-                  <span>-{formatCurrency(summary.discount)}</span>
+                  <span>
+                    {offerDiscount > 0 && offerDiscount >= summary.discount
+                      ? `${offer?.title || "Festive Offer"} (${offer?.discountPercent || 50}% OFF)`
+                      : "Discount"}
+                  </span>
+                  <span>-{formatCurrency(effectiveDiscount)}</span>
                 </div>
               )}
               <div className="flex justify-between text-xs text-text-secondary font-medium">
@@ -85,7 +122,7 @@ export default function CartDrawer() {
               </div>
               <div className="flex justify-between text-base font-bold text-text-primary pt-2 border-t border-border/60">
                 <span>Total (excl. delivery)</span>
-                <span className="text-primary">{formatCurrency(summary.total)}</span>
+                <span className="text-primary">{formatCurrency(effectiveTotal)}</span>
               </div>
             </div>
 
