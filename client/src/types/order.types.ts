@@ -33,6 +33,8 @@ export interface Order {
   products: OrderProductItem[];
   totalAmount: number;
   discount: number;
+  /** The part of discount that came from the festive offer */
+  offerDiscount?: number;
   deliveryCharge?: number;
   deliveryChargeSource?: "calculated" | "free" | "fallback";
   deliveryDistanceKm?: number;
@@ -140,6 +142,9 @@ export interface LogWhatsAppOrderPayload {
 export interface LogWhatsAppOrderResponse {
   orderId: string;
   deliveryCharge: number;
+  discount: number;
+  offerDiscount: number;
+  offerTitle?: string;
   finalAmount: number;
   orderStatus: OrderStatus;
 }
@@ -148,6 +153,8 @@ export interface ConfirmWhatsAppOrderResponse {
   orderId: string;
   finalAmount: number;
   orderStatus: OrderStatus;
+  /** The offer ran out before this order was confirmed */
+  offerEnded?: boolean;
 }
 
 export interface DeliveryLocation {
@@ -174,5 +181,8 @@ export interface DeliveryQuote {
   distanceKm: number | null;
   subtotal: number;
   discount: number;
+  offerDiscount: number;
+  offerTitle?: string;
+  offerPercent?: number;
   finalAmount: number | null;
 }

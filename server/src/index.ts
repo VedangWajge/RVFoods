@@ -13,6 +13,7 @@ import orderRoutes from "./routes/orderRoutes.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import deliveryRoutes from "./routes/deliveryRoutes.js";
+import offerRoutes from "./routes/offerRoutes.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
@@ -77,6 +78,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/delivery", deliveryLimiter, deliveryRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/offer", offerRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

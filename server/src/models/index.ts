@@ -16,3 +16,4 @@ export {
   type OrderStatus,
 } from "./Order.js";
 export { Review, type IReview } from "./Review.js";
+export { StoreSettings, type IStoreSettings, type IFestiveOffer } from "./StoreSettings.js";

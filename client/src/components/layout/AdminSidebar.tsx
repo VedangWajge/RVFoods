@@ -4,6 +4,7 @@ import {
   Package,
   ShoppingBag,
   Users,
+  Sparkles,
   ArrowLeft,
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -15,6 +16,7 @@ const ADMIN_LINKS = [
   { label: "Products", href: "/admin/products", icon: Package, end: false },
   { label: "Orders", href: "/admin/orders", icon: ShoppingBag, end: false },
   { label: "Users", href: "/admin/users", icon: Users, end: false },
+  { label: "Festive Offer", href: "/admin/offer", icon: Sparkles, end: false },
 ] as const;
 
 interface AdminSidebarProps {

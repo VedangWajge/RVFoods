@@ -2,6 +2,7 @@ import { afterEach, beforeEach, mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { User } from "../src/models/User.js";
 import { Order } from "../src/models/Order.js";
+import { StoreSettings } from "../src/models/StoreSettings.js";
 import { Product } from "../src/models/Product.js";
 import { login, register, resendOtp } from "../src/controllers/authController.js";
 import { createWhatsAppOrderAttempt } from "../src/controllers/orderController.js";
@@ -143,6 +144,7 @@ const placeOrder = async (body: object, user?: object) => {
     Promise.resolve(new Response(JSON.stringify({ routes: [{ distanceMeters: 5000 }] })))
   );
   const saved: any[] = [];
+  mock.method(StoreSettings, "findOne", () => Promise.resolve(null));
   mock.method(Order.prototype, "save", function (this: unknown) {
     saved.push(this);
     return Promise.resolve(this);

@@ -2,6 +2,7 @@ import { afterEach, mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { Order } from "../src/models/Order.js";
 import { Product } from "../src/models/Product.js";
+import { StoreSettings } from "../src/models/StoreSettings.js";
 import { updateOrderStatus } from "../src/controllers/orderController.js";
 import {
   createProduct,
@@ -34,8 +35,9 @@ const sizes = [
   { weight: "1kg", price: 900, stock: 0 },
 ];
 
-const mockProductWithSizes = () =>
-  mock.method(Product, "find", () =>
+const mockProductWithSizes = () => {
+  mock.method(StoreSettings, "findOne", () => Promise.resolve(null));
+  return mock.method(Product, "find", () =>
     Promise.resolve([
       {
         _id: { toString: () => PRODUCT_ID },
@@ -46,6 +48,7 @@ const mockProductWithSizes = () =>
       },
     ])
   );
+};
 
 afterEach(() => mock.restoreAll());
 
@@ -212,6 +215,7 @@ test("an order must name a size that exists", async () => {
 });
 
 test("single-size products still price as before", async () => {
+  mock.method(StoreSettings, "findOne", () => Promise.resolve(null));
   mock.method(Product, "find", () =>
     Promise.resolve([
       { _id: { toString: () => PRODUCT_ID }, name: "Karanji", price: 35, images: [] },

@@ -1,6 +1,7 @@
 import type { Types } from "mongoose";
 import { Product } from "../models/Product.js";
 import { AppError } from "../middleware/errorHandler.js";
+import { calculateOfferDiscount, getFestiveOfferStatus } from "./festiveOffer.js";
 
 interface OrderItemInput {
   productId: string;
@@ -19,7 +20,12 @@ interface PricedOrderProduct {
 export interface PricedOrderItems {
   orderProducts: PricedOrderProduct[];
   subtotal: number;
+  /** Everything taken off the subtotal */
   discount: number;
+  /** The part of discount that came from the festive offer */
+  offerDiscount: number;
+  offerTitle?: string;
+  offerPercent?: number;
 }
 
 /** Prices a cart from MongoDB. Nothing about the price is taken from the browser. */
@@ -89,13 +95,31 @@ export const priceOrderItems = async (
   }
 
   // Server-side promo calculation
-  let discount = 0;
+  let promoDiscount = 0;
   if (promoCode) {
     const normalizedPromo = promoCode.trim().toUpperCase();
     if (normalizedPromo === "RVFOODS10") {
-      discount = Math.round(subtotal * 0.1);
+      promoDiscount = Math.round(subtotal * 0.1);
     }
   }
+  promoDiscount = Math.min(promoDiscount, subtotal);
 
-  return { orderProducts, subtotal, discount: Math.min(discount, subtotal) };
+  // The festive offer and promo codes don't add up: the bigger one applies.
+  const offer = await getFestiveOfferStatus();
+  const offerDiscount = offer.active
+    ? calculateOfferDiscount(subtotal, offer.discountPercent)
+    : 0;
+
+  if (offerDiscount > 0 && offerDiscount >= promoDiscount) {
+    return {
+      orderProducts,
+      subtotal,
+      discount: offerDiscount,
+      offerDiscount,
+      offerTitle: offer.title,
+      offerPercent: offer.discountPercent,
+    };
+  }
+
+  return { orderProducts, subtotal, discount: promoDiscount, offerDiscount: 0 };
 };

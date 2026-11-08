@@ -36,6 +36,8 @@ export interface IOrder extends Document {
   products: IOrderProductItem[];
   totalAmount: number;
   discount: number;
+  /** The part of discount that came from the festive offer */
+  offerDiscount: number;
   deliveryCharge: number;
   deliveryChargeSource?: DeliveryChargeSource;
   deliveryDistanceKm?: number;
@@ -117,6 +119,11 @@ const orderSchema = new Schema<IOrder>(
       default: 0,
       min: 0,
     },
+    offerDiscount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     deliveryCharge: {
       type: Number,
       default: 0,
@@ -174,6 +181,7 @@ const orderSchema = new Schema<IOrder>(
 
 orderSchema.index({ orderStatus: 1, createdAt: -1 });
 orderSchema.index({ paymentStatus: 1 });
+orderSchema.index({ offerDiscount: 1, createdAt: -1 });
 
 orderSchema.pre("validate", async function (next) {
   if (this.orderId) return next();

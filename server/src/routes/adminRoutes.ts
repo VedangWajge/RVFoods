@@ -6,6 +6,7 @@ import {
   getAdminOrders,
   getAdminProducts,
 } from "../controllers/adminController.js";
+import { getAdminOffer, updateAdminOffer } from "../controllers/offerController.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { adminOnly } from "../middleware/adminMiddleware.js";
 
@@ -20,5 +21,7 @@ router.get("/users", getAdminUsers);
 router.put("/users/:id", updateAdminUser);
 router.get("/orders", getAdminOrders);
 router.get("/products", getAdminProducts);
+router.get("/offer", getAdminOffer);
+router.put("/offer", updateAdminOffer);
 
 export default router;

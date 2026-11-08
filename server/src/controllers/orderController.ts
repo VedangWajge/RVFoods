@@ -6,6 +6,7 @@ import { sendSuccess } from "../utils/apiResponse.js";
 import { getRoadDistanceKm } from "../utils/deliveryDistance.js";
 import { buildDeliveryQuote } from "../utils/deliveryPricing.js";
 import { priceOrderItems } from "../utils/orderPricing.js";
+import { countClaimedOfferOrders, getFestiveOffer } from "../utils/festiveOffer.js";
 import { asyncHandler, AppError } from "../middleware/errorHandler.js";
 import {
   updateOrderStatusSchema,
@@ -42,8 +43,13 @@ export const createWhatsAppOrderAttempt = asyncHandler(
       expectedDeliveryCharge,
     } = validatedData;
 
-    const { orderProducts, subtotal, discount: safeDiscount } =
-      await priceOrderItems(items, promoCode);
+    const {
+      orderProducts,
+      subtotal,
+      discount: safeDiscount,
+      offerDiscount,
+      offerTitle,
+    } = await priceOrderItems(items, promoCode);
 
     // Recalculate here: the browser only ever sends what it was shown.
     const quote = buildDeliveryQuote(await getRoadDistanceKm(location), subtotal);
@@ -94,6 +100,7 @@ export const createWhatsAppOrderAttempt = asyncHandler(
         existingOrder.products = orderProducts;
         existingOrder.totalAmount = subtotal;
         existingOrder.discount = safeDiscount;
+        existingOrder.offerDiscount = offerDiscount;
         existingOrder.finalAmount = finalAmount;
         existingOrder.set(deliveryDetails);
         if (!existingOrder.userId && req.user?._id) {
@@ -108,6 +115,9 @@ export const createWhatsAppOrderAttempt = asyncHandler(
           {
             orderId: existingOrder.orderId,
             deliveryCharge,
+            discount: safeDiscount,
+            offerDiscount,
+            offerTitle,
             finalAmount: existingOrder.finalAmount,
             orderStatus: existingOrder.orderStatus,
           },
@@ -122,6 +132,7 @@ export const createWhatsAppOrderAttempt = asyncHandler(
       products: orderProducts,
       totalAmount: subtotal,
       discount: safeDiscount,
+      offerDiscount,
       finalAmount,
       ...deliveryDetails,
       paymentStatus: "pending",
@@ -137,6 +148,9 @@ export const createWhatsAppOrderAttempt = asyncHandler(
       {
         orderId: order.orderId,
         deliveryCharge,
+        discount: safeDiscount,
+        offerDiscount,
+        offerTitle,
         finalAmount: order.finalAmount,
         orderStatus: order.orderStatus,
       },
@@ -177,6 +191,26 @@ export const confirmWhatsAppOrder = asyncHandler(
       return;
     }
 
+    // The offer may have been switched off, or used up by other customers,
+    // since this draft was priced. Only confirmed orders take a place.
+    let offerEnded = false;
+    if (order.offerDiscount > 0) {
+      const offer = await getFestiveOffer();
+      const claimed = offer.discountEnabled
+        ? await countClaimedOfferOrders(offer, order._id as Types.ObjectId)
+        : offer.maxOrders;
+
+      if (claimed >= offer.maxOrders) {
+        offerEnded = true;
+        order.discount = Math.max(0, order.discount - order.offerDiscount);
+        order.offerDiscount = 0;
+        order.finalAmount = Math.max(
+          0,
+          order.totalAmount - order.discount + order.deliveryCharge
+        );
+      }
+    }
+
     // Promote draft attempt to placed order
     order.orderStatus = "placed";
     // Payment status remains pending (placed order does not mean paid)
@@ -186,7 +220,14 @@ export const confirmWhatsAppOrder = asyncHandler(
 
     await order.save();
 
-    sendSuccess(res, "Order confirmed successfully", toOrderReceipt(order), 200);
+    sendSuccess(
+      res,
+      offerEnded
+        ? `Order confirmed. Sorry, the offer has just ended, so your total is ₹${order.finalAmount}.`
+        : "Order confirmed successfully",
+      { ...toOrderReceipt(order), ...(offerEnded ? { offerEnded } : {}) },
+      200
+    );
   }
 );
 

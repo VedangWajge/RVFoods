@@ -13,13 +13,17 @@ export const getDeliveryQuote = asyncHandler(
   async (req: Request, res: Response) => {
     const { location, items, promoCode } = deliveryQuoteSchema.parse(req.body);
 
-    const { subtotal, discount } = await priceOrderItems(items, promoCode);
+    const { subtotal, discount, offerDiscount, offerTitle, offerPercent } =
+      await priceOrderItems(items, promoCode);
     const quote = buildDeliveryQuote(await getRoadDistanceKm(location), subtotal);
 
     sendSuccess(res, "Delivery quote calculated", {
       ...quote,
       subtotal,
       discount,
+      offerDiscount,
+      offerTitle,
+      offerPercent,
       finalAmount:
         quote.deliveryCharge === null
           ? null

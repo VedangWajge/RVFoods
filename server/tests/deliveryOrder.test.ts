@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { Order } from "../src/models/Order.js";
+import { StoreSettings } from "../src/models/StoreSettings.js";
 import { Product } from "../src/models/Product.js";
 import { DELIVERY_CONFIG } from "../src/config/delivery.js";
 import {
@@ -64,6 +65,7 @@ beforeEach(() => {
       { _id: { toString: () => PRODUCT_ID }, name: "Chakli", price: 500, images: [] },
     ])
   );
+  mock.method(StoreSettings, "findOne", () => Promise.resolve(null));
   mock.method(Order.prototype, "save", function (this: unknown) {
     saved.push(this);
     return Promise.resolve(this);
