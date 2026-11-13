@@ -32,6 +32,9 @@ interface AuthState {
   fetchMe: () => Promise<void>;
 }
 
+// How long a protected page waits to learn whether the saved session is valid.
+const AUTH_INIT_TIMEOUT_MS = 8000;
+
 const setSession = (
   user: UserPublic,
   accessToken: string
@@ -68,19 +71,22 @@ export const useAuthStore = create<AuthState>()(
       initializeAuth: async () => {
         if (get().isInitialized || get().isLoading) return;
 
+        const { accessToken, user } = get();
+
+        // This browser has never signed in (or has signed out): there is no
+        // session to restore, so don't make a network call at all.
+        if (!accessToken && !user) {
+          set({ isInitialized: true });
+          return;
+        }
+
         set({ isLoading: true });
 
-        try {
-          const { accessToken } = get();
-
+        const restore = async () => {
           if (accessToken) {
             const me = await authService.getMe();
             if (me.data?.user) {
-              set({
-                ...setSession(me.data.user, accessToken),
-                isInitialized: true,
-                isLoading: false,
-              });
+              set(setSession(me.data.user, accessToken));
               return;
             }
           }
@@ -91,19 +97,29 @@ export const useAuthStore = create<AuthState>()(
           if (newToken) {
             const me = await authService.getMe();
             if (me.data?.user) {
-              set({
-                ...setSession(me.data.user, newToken),
-                isInitialized: true,
-                isLoading: false,
-              });
+              set(setSession(me.data.user, newToken));
               return;
             }
           }
 
           get().clearAuth();
+        };
+
+        let timer: ReturnType<typeof setTimeout> | undefined;
+
+        try {
+          // A slow server isn't proof the session is invalid: on timeout keep
+          // the stored session and let the next request settle it.
+          await Promise.race([
+            restore(),
+            new Promise<void>((resolve) => {
+              timer = setTimeout(resolve, AUTH_INIT_TIMEOUT_MS);
+            }),
+          ]);
         } catch {
           get().clearAuth();
         } finally {
+          clearTimeout(timer);
           set({ isInitialized: true, isLoading: false });
         }
       },
